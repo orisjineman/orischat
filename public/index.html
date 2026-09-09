@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrisChat</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 닉네임 입력 화면 -->
+  <div id="login-screen" class="screen">
+    <div class="login-box">
+      <h1>OrisChat</h1>
+      <p>닉네임을 입력하고 채팅을 시작하세요.</p>
+      <input id="nickname-input" type="text" placeholder="닉네임" maxlength="20" autocomplete="off" />
+      <button id="join-btn">입장하기</button>
+    </div>
+  </div>
+
+  <!-- 채팅 화면 -->
+  <div id="chat-screen" class="screen hidden">
+    <aside id="sidebar">
+      <h2>참여자</h2>
+      <ul id="user-list"></ul>
+    </aside>
+    <main id="chat-main">
+      <header id="chat-header">
+        <span>OrisChat</span>
+      </header>
+      <div id="messages"></div>
+      <div id="typing-indicator"></div>
+      <form id="message-form">
+        <input id="message-input" type="text" placeholder="메시지를 입력하세요" autocomplete="off" maxlength="500" />
+        <button type="submit">보내기</button>
+      </form>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
