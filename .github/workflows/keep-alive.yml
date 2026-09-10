@@ -11,4 +11,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping OrisChat
-        run: curl -sf https://REDACTED.onrender.com > /dev/null
+        run: curl -sf "${{ secrets.APP_URL }}" > /dev/null
