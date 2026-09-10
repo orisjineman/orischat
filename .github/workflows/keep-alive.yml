@@ -6,9 +6,22 @@ on:
     - cron: "*/10 * * * *"
   workflow_dispatch: {}
 
+permissions:
+  deployments: write
+
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
       - name: Ping OrisChat
         run: curl -sf "${{ secrets.APP_URL }}" > /dev/null
+
+      - name: Render가 남기는 GitHub Deployment 기록 정리 (environment_url에 도메인 노출됨)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ids=$(gh api "repos/${{ github.repository }}/deployments" --jq '.[].id')
+          for id in $ids; do
+            gh api -X POST "repos/${{ github.repository }}/deployments/$id/statuses" -f state=inactive
+            gh api -X DELETE "repos/${{ github.repository }}/deployments/$id"
+          done
