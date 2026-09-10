@@ -25,9 +25,41 @@ function getClientId() {
 }
 const myClientId = getClientId();
 
-let myNickname = '';
+// sessionStorage는 "새로고침하면 유지되고, 탭을 닫으면 사라지는" 저장소라서
+// 딱 원하는 동작(새로고침 → 재입장 화면 안 보고 이어가기 / 탭 닫음 → 초기화)에 맞음.
+const NICKNAME_KEY = 'orischat-nickname';
+const HISTORY_KEY = 'orischat-history';
+const HISTORY_LIMIT = 200;
+
+let myNickname = sessionStorage.getItem(NICKNAME_KEY) || '';
 let hasJoined = false;
 let typingTimeout = null;
+
+// 새로고침 시 로그인 화면이 잠깐이라도 보이지 않도록, 저장된 닉네임이 있으면
+// 곧바로 채팅 화면을 보여주고 뒤에서 재입장을 시도함.
+if (myNickname) {
+  loginScreen.classList.add('hidden');
+  chatScreen.classList.remove('hidden');
+}
+
+function loadHistory() {
+  try {
+    return JSON.parse(sessionStorage.getItem(HISTORY_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveToHistory(entry) {
+  const history = loadHistory();
+  history.push(entry);
+  while (history.length > HISTORY_LIMIT) history.shift();
+  try {
+    sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch {
+    // 저장 공간이 꽉 찬 경우 등은 무시 (히스토리 유지는 보너스 기능이라 실패해도 괜찮음)
+  }
+}
 
 function join() {
   const name = nicknameInput.value.trim();
@@ -44,20 +76,24 @@ nicknameInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') join();
 });
 
-// 소켓이 (재)연결될 때마다 실행됨. 이미 입장했던 상태라면 같은 닉네임/clientId로
-// 자동 재입장해서, 연결이 끊겼다 붙어도 "내 메시지"가 계속 정확히 표시되게 함.
+// 소켓이 (재)연결될 때마다 실행됨 — 페이지를 새로고침한 첫 연결이든, 네트워크가
+// 끊겼다 다시 붙은 재연결이든 동일하게 저장된 닉네임/clientId로 자동 (재)입장함.
 socket.on('connect', () => {
-  if (hasJoined) {
+  if (myNickname) {
     socket.emit('join', { nickname: myNickname, clientId: myClientId });
   }
 });
 
 socket.on('joined', ({ nickname }) => {
+  const firstTime = !hasJoined;
   myNickname = nickname;
   hasJoined = true;
+  sessionStorage.setItem(NICKNAME_KEY, nickname);
   loginScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
-  messageInput.focus();
+  if (firstTime) {
+    messageInput.focus();
+  }
 });
 
 socket.on('user-list', (users) => {
@@ -74,16 +110,31 @@ function formatTime(ts) {
   return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function appendMessage({ nickname, message, time, clientId }) {
+function appendMessage({ type, content, message, nickname, time, clientId }) {
   const div = document.createElement('div');
   const isMe = clientId === myClientId;
-  div.className = `msg ${isMe ? 'me' : 'other'}`;
+  // 구버전 서버 호환: type이 없으면 텍스트 메시지(message 필드)로 취급
+  const kind = type || 'text';
+  const text = content ?? message ?? '';
+
+  div.className = `msg ${isMe ? 'me' : 'other'} ${kind === 'sticker' ? 'sticker' : ''}`;
   div.innerHTML = `
     ${isMe ? '' : `<div class="msg-nick">${escapeHtml(nickname)}</div>`}
-    <div class="msg-text"></div>
+    <div class="msg-body"></div>
     <div class="msg-time">${formatTime(time)}</div>
   `;
-  div.querySelector('.msg-text').textContent = message;
+
+  const body = div.querySelector('.msg-body');
+  if (kind === 'sticker') {
+    const img = document.createElement('img');
+    img.src = `/stickers/${encodeURIComponent(text)}`;
+    img.alt = '스티커';
+    img.className = 'sticker-img';
+    body.appendChild(img);
+  } else {
+    body.textContent = text;
+  }
+
   messagesEl.appendChild(div);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
@@ -102,8 +153,21 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-socket.on('chat-message', appendMessage);
-socket.on('system-message', appendSystemMessage);
+// 새로고침 시 sessionStorage에 저장해둔 이전 대화를 먼저 복원
+loadHistory().forEach((entry) => {
+  if (entry.kind === 'chat') appendMessage(entry.payload);
+  else if (entry.kind === 'system') appendSystemMessage(entry.text);
+});
+
+socket.on('chat-message', (payload) => {
+  appendMessage(payload);
+  saveToHistory({ kind: 'chat', payload });
+});
+
+socket.on('system-message', (text) => {
+  appendSystemMessage(text);
+  saveToHistory({ kind: 'system', text });
+});
 
 socket.on('typing', ({ nickname, isTyping }) => {
   typingIndicator.textContent = isTyping ? `${nickname}님이 입력 중...` : '';
@@ -113,7 +177,7 @@ messageForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
   if (!text) return;
-  socket.emit('chat-message', text);
+  socket.emit('chat-message', { type: 'text', content: text });
   messageInput.value = '';
   socket.emit('typing', false);
 });
@@ -124,32 +188,47 @@ messageInput.addEventListener('input', () => {
   typingTimeout = setTimeout(() => socket.emit('typing', false), 1500);
 });
 
-// --- 이모티콘 피커 ---
-const EMOJIS = [
-  '😀', '😂', '😅', '😊', '😍', '🥰', '😘', '😎', '🤔', '😴',
-  '😭', '😡', '🥳', '😱', '🙄', '😬', '🤯', '🥺', '😷', '🤗',
-  '👍', '👎', '👏', '🙏', '💪', '🙌', '👌', '✌️', '🤝', '💕',
-  '❤️', '🔥', '✨', '🎉', '🎈', '☕', '🍺', '🍕', '⭐', '💯',
-];
+// --- 스티커 피커 ---
+// public/stickers 폴더에 있는 이미지를 스티커로 불러옴. 클릭하면 그 자리에서
+// 바로 이미지 메시지로 전송됨.
+async function buildEmojiPicker() {
+  let files = [];
+  try {
+    const res = await fetch('/api/stickers');
+    files = await res.json();
+  } catch {
+    files = [];
+  }
 
-emojiPicker.innerHTML = EMOJIS.map((e) => `<button type="button" class="emoji-item">${e}</button>`).join('');
+  emojiPicker.innerHTML = files.length
+    ? `<div class="picker-grid">${files
+        .map(
+          (name) =>
+            `<button type="button" class="sticker-item" data-filename="${escapeHtml(name)}">
+              <img src="/stickers/${encodeURIComponent(name)}" alt="${escapeHtml(name)}" loading="lazy" />
+            </button>`
+        )
+        .join('')}</div>`
+    : `<div class="picker-empty">public/stickers 폴더에 이미지를 넣어보세요</div>`;
+}
 
-emojiBtn.addEventListener('click', (e) => {
+function sendSticker(filename) {
+  socket.emit('chat-message', { type: 'sticker', content: filename });
+}
+
+emojiBtn.addEventListener('click', async (e) => {
   e.stopPropagation();
+  const willOpen = emojiPicker.classList.contains('hidden');
   emojiPicker.classList.toggle('hidden');
+  if (willOpen) await buildEmojiPicker();
 });
 
 emojiPicker.addEventListener('click', (e) => {
-  const btn = e.target.closest('.emoji-item');
-  if (!btn) return;
-  // 커서 위치에 이모티콘 삽입
-  const start = messageInput.selectionStart ?? messageInput.value.length;
-  const end = messageInput.selectionEnd ?? messageInput.value.length;
-  const emoji = btn.textContent;
-  messageInput.value = messageInput.value.slice(0, start) + emoji + messageInput.value.slice(end);
-  const cursor = start + emoji.length;
-  messageInput.focus();
-  messageInput.setSelectionRange(cursor, cursor);
+  const stickerBtnEl = e.target.closest('.sticker-item');
+  if (stickerBtnEl) {
+    sendSticker(stickerBtnEl.dataset.filename);
+    emojiPicker.classList.add('hidden');
+  }
 });
 
 document.addEventListener('click', (e) => {
