@@ -19,12 +19,18 @@ function broadcastUserList() {
 }
 
 io.on('connection', (socket) => {
-  socket.on('join', (nickname) => {
+  socket.on('join', (data) => {
+    // 문자열(구버전 클라이언트)과 { nickname, clientId } 객체 둘 다 지원
+    const { nickname, clientId } = typeof data === 'string' ? { nickname: data, clientId: null } : (data || {});
     const cleanName = String(nickname || '').trim().slice(0, 20) || `손님${socket.id.slice(0, 4)}`;
+    // clientId는 브라우저마다 고유한 값으로, 재연결되어도 "나"를 정확히 구분하기 위해 사용
+    const id = String(clientId || socket.id).slice(0, 100);
+
     users.set(socket.id, cleanName);
     socket.data.nickname = cleanName;
+    socket.data.clientId = id;
 
-    socket.emit('joined', cleanName);
+    socket.emit('joined', { nickname: cleanName, clientId: id });
     socket.broadcast.emit('system-message', `${cleanName}님이 입장했습니다.`);
     broadcastUserList();
   });
@@ -37,6 +43,7 @@ io.on('connection', (socket) => {
       nickname,
       message,
       time: Date.now(),
+      clientId: socket.data.clientId,
     });
   });
 
