@@ -73,6 +73,12 @@ fetch('/api/config')
   .then(({ pinRequired, pushPublicKey: key }) => {
     if (pinRequired) pinInput.classList.remove('hidden');
     pushPublicKey = key || null;
+    // 알림 권한이 이미 "허용"인 상태로 새로고침한 경우, 페이지 로드 시점의
+    // updateNotifyButton() 호출은 이 fetch가 끝나기 전이라 pushPublicKey가 아직
+    // 없어서 구독을 건너뛰었을 수 있음 — 키가 도착한 지금 다시 시도함.
+    if (pushPublicKey && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      trySubscribePush();
+    }
   })
   .catch(() => {});
 
