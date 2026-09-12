@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OrisChat</title>
+  <meta name="theme-color" content="#4f7cff" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -13,6 +17,7 @@
       <h1>OrisChat</h1>
       <p>닉네임을 입력하고 채팅을 시작하세요.</p>
       <input id="nickname-input" type="text" placeholder="닉네임" maxlength="20" autocomplete="off" />
+      <input id="room-input" type="text" placeholder="방 이름 (선택, 비워두면 기본 방)" maxlength="30" autocomplete="off" />
       <input id="pin-input" type="password" placeholder="비밀번호" maxlength="50" autocomplete="off" class="hidden" />
       <p id="join-error" class="hidden"></p>
       <button id="join-btn">입장하기</button>
@@ -27,8 +32,11 @@
     </aside>
     <main id="chat-main">
       <header id="chat-header">
-        <span>OrisChat</span>
-        <button type="button" id="notify-btn" aria-label="알림 켜기">🔕 알림 켜기</button>
+        <span id="room-label">OrisChat</span>
+        <div id="header-actions">
+          <button type="button" id="notify-btn" aria-label="알림 켜기">🔕 알림 켜기</button>
+          <button type="button" id="theme-toggle-btn" aria-label="라이트/다크 테마 전환">🌓</button>
+        </div>
       </header>
       <div id="messages"></div>
       <div id="typing-indicator"></div>
