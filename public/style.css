@@ -163,11 +163,32 @@ body {
   height: 56px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 20px;
   border-bottom: 1px solid var(--border);
   font-weight: 700;
   color: var(--accent);
   background: var(--panel);
+}
+
+#notify-btn {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+#notify-btn:hover {
+  background: var(--bubble-other);
+}
+
+#notify-btn.granted {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 #messages {

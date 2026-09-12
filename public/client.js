@@ -13,6 +13,7 @@ const messageForm = document.getElementById('message-form');
 const messageInput = document.getElementById('message-input');
 const emojiBtn = document.getElementById('emoji-btn');
 const emojiPicker = document.getElementById('emoji-picker');
+const notifyBtn = document.getElementById('notify-btn');
 
 // 브라우저마다 고유한 ID. 재연결(화면 꺼짐/네트워크 전환 등)되어도 "내 메시지"를
 // 정확히 구분하기 위해 사용 — 닉네임만으로 비교하면 재연결 시나 동명 닉네임일 때
@@ -96,9 +97,40 @@ function updateHistoryReactions(messageId, reactionsObj) {
 function requestNotificationPermission() {
   if (typeof Notification === 'undefined') return;
   if (Notification.permission === 'default') {
-    Notification.requestPermission();
+    Notification.requestPermission().then(updateNotifyButton);
   }
 }
+
+// 알림 버튼 상태 표시. sessionStorage로 세션이 자동 복원되는 경우(재입장 버튼을
+// 직접 안 누름)에는 권한 요청 기회가 없었을 수 있어서, 버튼을 눌러 언제든
+// 다시 요청할 수 있게 함.
+function updateNotifyButton() {
+  if (typeof Notification === 'undefined') {
+    notifyBtn.classList.add('hidden');
+    return;
+  }
+  if (Notification.permission === 'granted') {
+    notifyBtn.textContent = '🔔 알림 켜짐';
+    notifyBtn.classList.add('granted');
+  } else if (Notification.permission === 'denied') {
+    notifyBtn.textContent = '🔕 알림 차단됨 (브라우저 설정에서 허용해주세요)';
+    notifyBtn.classList.remove('granted');
+  } else {
+    notifyBtn.textContent = '🔕 알림 켜기';
+    notifyBtn.classList.remove('granted');
+  }
+}
+
+notifyBtn.addEventListener('click', () => {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission().then(updateNotifyButton);
+  } else {
+    updateNotifyButton(); // denied/granted면 그냥 현재 상태 문구만 다시 보여줌
+  }
+});
+
+updateNotifyButton();
 
 function join() {
   const name = nicknameInput.value.trim();
