@@ -13,6 +13,7 @@
 - 이모지 리액션 (메시지에 👍❤️😂 등으로 반응)
 - 브라우저 알림 (탭이 안 보일 때 새 메시지 오면 알림)
 - 입장 비밀번호 (선택, `CHAT_PIN` 환경 변수로 설정)
+- 메시지/리액션 영구 저장 ([Turso](https://turso.tech) 연동 시, 서버 재시작해도 대화 유지)
 - 새로고침해도 대화 유지 (탭을 닫으면 초기화)
 - 라이트 / 다크 모드 자동 대응 UI
 
@@ -41,13 +42,21 @@ PORT=4000 npm start
 CHAT_PIN=1234 npm start
 ```
 
-Render에 배포한 경우 대시보드의 **Environment** 탭에서 `CHAT_PIN`을 추가하면 됩니다.
+Render에 배포한 경우 대시보드의 **Environment** 탭에서 환경 변수를 추가하면 됩니다.
+
+메시지를 영구 저장하려면 [Turso](https://turso.tech)에서 무료 데이터베이스를 만들고 아래 두 환경 변수를 설정하세요 (안 정하면 메모리에만 저장되어 서버 재시작 시 사라짐).
+
+```bash
+TURSO_DATABASE_URL=libsql://xxxx.turso.io
+TURSO_AUTH_TOKEN=xxxx
+```
 
 ## 프로젝트 구조
 
 ```
 .
 ├── server.js          # Express + Socket.IO 서버
+├── db.js              # Turso(libSQL) 메시지/리액션 저장소
 ├── public/
 │   ├── index.html      # 채팅 화면 UI
 │   ├── style.css        # 스타일
@@ -68,7 +77,7 @@ Render 무료 플랜은 15분간 요청이 없으면 서버가 잠들고, 다음
 
 ## 참고 / 한계
 
-- 메시지/리액션이 메모리에만 저장되어 서버가 재시작되면 대화 기록이 사라집니다 (별도 DB 연동 없음). 각자 브라우저의 `sessionStorage`에 최근 대화가 남아있어서 새로고침해도 유지되지만, 자리를 비운 사이 온 메시지는 다시 볼 수 없습니다.
+- `TURSO_DATABASE_URL`을 설정하지 않으면 메시지/리액션이 메모리에만 저장되어 서버가 재시작되면 사라집니다.
 - `CHAT_PIN`을 설정하지 않으면 접속 주소를 아는 사람은 누구나 들어올 수 있습니다
 
 ## 라이선스

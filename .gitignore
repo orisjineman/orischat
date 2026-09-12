@@ -5,3 +5,4 @@ logs/
 .stickers-cache/
 .claude/
 .idea/
+turso_token

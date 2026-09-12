@@ -5,6 +5,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const sharp = require('sharp');
+const db = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,7 +19,8 @@ const CHAT_PIN = process.env.CHAT_PIN || '';
 const users = new Map();
 
 // 메시지별 반응(이모지 리액션): messageId -> { emoji -> Set of clientId }
-// DB 연동 전이라 서버 재시작하면 사라짐 (메시지 자체도 마찬가지)
+// TURSO_DATABASE_URL이 없을 때(로컬 개발 등)만 쓰는 메모리 폴백. DB가 켜져
+// 있으면 db.js가 진짜 저장소 역할을 함.
 const reactions = new Map();
 
 function broadcastUserList() {
@@ -122,62 +124,82 @@ io.on('connection', (socket) => {
     socket.emit('joined', { nickname: cleanName, clientId: id });
     socket.broadcast.emit('system-message', `${cleanName}님이 입장했습니다.`);
     broadcastUserList();
+
+    if (db.enabled) {
+      db.getRecentMessages(200)
+        .then((history) => socket.emit('history', history))
+        .catch((err) => console.error('히스토리 조회 오류:', err));
+    }
   });
 
-  socket.on('chat-message', (payload) => {
+  socket.on('chat-message', async (payload) => {
     // 문자열(구버전 클라이언트)과 { type, content } 객체 둘 다 지원
     const data = typeof payload === 'string' ? { type: 'text', content: payload } : (payload || {});
     const nickname = socket.data.nickname || '알수없음';
+    const clientId = socket.data.clientId;
     const id = crypto.randomUUID();
+    const time = Date.now();
+
+    let type;
+    let content;
 
     if (data.type === 'sticker') {
       // 경로 조작(../ 등) 방지 + 실제 존재하는 스티커 파일인지 검증
       const filename = path.basename(String(data.content || ''));
       if (!listStickers().includes(filename)) return;
-      io.emit('chat-message', {
-        id,
-        type: 'sticker',
-        content: filename,
-        nickname,
-        time: Date.now(),
-        clientId: socket.data.clientId,
-      });
-      return;
+      type = 'sticker';
+      content = filename;
+    } else {
+      const message = String(data.content || '').trim().slice(0, 500);
+      if (!message) return;
+      type = 'text';
+      content = message;
     }
 
-    const message = String(data.content || '').trim().slice(0, 500);
-    if (!message) return;
-    io.emit('chat-message', {
-      id,
-      type: 'text',
-      content: message,
-      nickname,
-      time: Date.now(),
-      clientId: socket.data.clientId,
-    });
+    if (db.enabled) {
+      try {
+        await db.insertMessage({ id, type, content, nickname, clientId, time });
+      } catch (err) {
+        console.error('메시지 저장 오류:', err);
+      }
+    }
+
+    io.emit('chat-message', { id, type, content, nickname, time, clientId });
   });
 
-  socket.on('react', ({ messageId, emoji } = {}) => {
+  socket.on('react', async ({ messageId, emoji } = {}) => {
     const clientId = socket.data.clientId;
     if (!clientId || !messageId || !emoji) return;
 
-    if (!reactions.has(messageId)) reactions.set(messageId, new Map());
-    const byEmoji = reactions.get(messageId);
-    if (!byEmoji.has(emoji)) byEmoji.set(emoji, new Set());
-    const clientIds = byEmoji.get(emoji);
+    let summary;
 
-    // 이미 눌렀던 반응이면 취소(토글), 아니면 추가
-    if (clientIds.has(clientId)) {
-      clientIds.delete(clientId);
-      if (clientIds.size === 0) byEmoji.delete(emoji);
+    if (db.enabled) {
+      try {
+        summary = await db.toggleReaction(messageId, emoji, clientId);
+      } catch (err) {
+        console.error('리액션 저장 오류:', err);
+        return;
+      }
     } else {
-      clientIds.add(clientId);
+      // 메모리 전용 폴백 (DB 미설정 시)
+      if (!reactions.has(messageId)) reactions.set(messageId, new Map());
+      const byEmoji = reactions.get(messageId);
+      if (!byEmoji.has(emoji)) byEmoji.set(emoji, new Set());
+      const clientIds = byEmoji.get(emoji);
+
+      if (clientIds.has(clientId)) {
+        clientIds.delete(clientId);
+        if (clientIds.size === 0) byEmoji.delete(emoji);
+      } else {
+        clientIds.add(clientId);
+      }
+
+      summary = {};
+      for (const [e, ids] of byEmoji.entries()) {
+        summary[e] = Array.from(ids);
+      }
     }
 
-    const summary = {};
-    for (const [e, ids] of byEmoji.entries()) {
-      summary[e] = Array.from(ids);
-    }
     io.emit('reaction-update', { messageId, reactions: summary });
   });
 
@@ -197,6 +219,10 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`채팅 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
-});
+db.init()
+  .catch((err) => console.error('DB 초기화 오류:', err))
+  .finally(() => {
+    server.listen(PORT, () => {
+      console.log(`채팅 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
+    });
+  });

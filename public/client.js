@@ -363,6 +363,18 @@ socket.on('chat-message', (payload) => {
   maybeNotify(payload);
 });
 
+// 서버가 DB에서 불러온 진짜 대화 기록. sessionStorage 캐시(새로고침 전까지의
+// 임시 복원용)를 서버가 알려주는 정확한 내용으로 교체함 — 이렇게 하면 새로
+// 들어온 사람도 지난 대화를 볼 수 있고, 중복 표시도 안 생김.
+socket.on('history', (messages) => {
+  messagesEl.innerHTML = '';
+  sessionStorage.removeItem(HISTORY_KEY);
+  messages.forEach((payload) => {
+    appendMessage(payload);
+    saveToHistory({ kind: 'chat', payload });
+  });
+});
+
 socket.on('system-message', (text) => {
   appendSystemMessage(text);
   saveToHistory({ kind: 'system', text });
