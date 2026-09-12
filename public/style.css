@@ -71,6 +71,12 @@ body {
   font-size: 14px;
 }
 
+#join-error {
+  margin: -8px 0 12px;
+  color: #e0455f;
+  font-size: 13px;
+}
+
 .login-box input {
   width: 100%;
   padding: 12px 14px;
@@ -236,6 +242,84 @@ body {
   max-height: 160px;
   border-radius: 12px;
   object-fit: contain;
+}
+
+.msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.msg-footer .msg-time {
+  margin-top: 0;
+}
+
+.react-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.react-btn:hover {
+  opacity: 1;
+}
+
+.msg-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.msg-reactions:empty {
+  margin-top: 0;
+}
+
+.reaction-pill {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.reaction-pill.mine {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+}
+
+#reaction-popup {
+  position: fixed;
+  display: flex;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+}
+
+.reaction-pick {
+  border: none;
+  background: none;
+  font-size: 18px;
+  padding: 4px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.reaction-pick:hover {
+  background: var(--bubble-other);
 }
 
 #typing-indicator {

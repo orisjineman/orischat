@@ -3,6 +3,8 @@ const socket = io();
 const loginScreen = document.getElementById('login-screen');
 const chatScreen = document.getElementById('chat-screen');
 const nicknameInput = document.getElementById('nickname-input');
+const pinInput = document.getElementById('pin-input');
+const joinError = document.getElementById('join-error');
 const joinBtn = document.getElementById('join-btn');
 const userList = document.getElementById('user-list');
 const messagesEl = document.getElementById('messages');
@@ -28,10 +30,12 @@ const myClientId = getClientId();
 // sessionStorage는 "새로고침하면 유지되고, 탭을 닫으면 사라지는" 저장소라서
 // 딱 원하는 동작(새로고침 → 재입장 화면 안 보고 이어가기 / 탭 닫음 → 초기화)에 맞음.
 const NICKNAME_KEY = 'orischat-nickname';
+const PIN_KEY = 'orischat-pin';
 const HISTORY_KEY = 'orischat-history';
 const HISTORY_LIMIT = 200;
 
 let myNickname = sessionStorage.getItem(NICKNAME_KEY) || '';
+let myPin = sessionStorage.getItem(PIN_KEY) || '';
 let hasJoined = false;
 let typingTimeout = null;
 
@@ -41,6 +45,14 @@ if (myNickname) {
   loginScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
 }
+
+// 서버에 비밀번호가 설정되어 있을 때만 입력칸을 보여줌
+fetch('/api/config')
+  .then((res) => res.json())
+  .then(({ pinRequired }) => {
+    if (pinRequired) pinInput.classList.remove('hidden');
+  })
+  .catch(() => {});
 
 function loadHistory() {
   try {
@@ -61,18 +73,51 @@ function saveToHistory(entry) {
   }
 }
 
+// 리액션이 바뀌면 sessionStorage에 저장해둔 히스토리에도 반영해서, 새로고침해도
+// 리액션 상태가 유지되게 함
+function updateHistoryReactions(messageId, reactionsObj) {
+  const history = loadHistory();
+  let changed = false;
+  for (const entry of history) {
+    if (entry.kind === 'chat' && entry.payload && entry.payload.id === messageId) {
+      entry.payload.reactions = reactionsObj;
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    } catch {
+      // 무시
+    }
+  }
+}
+
+function requestNotificationPermission() {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
 function join() {
   const name = nicknameInput.value.trim();
   if (!name) {
     nicknameInput.focus();
     return;
   }
+  requestNotificationPermission(); // 버튼 클릭(사용자 제스처) 시점에 물어봐야 브라우저가 허용함
   myNickname = name;
-  socket.emit('join', { nickname: name, clientId: myClientId });
+  myPin = pinInput.value;
+  joinError.classList.add('hidden');
+  socket.emit('join', { nickname: name, clientId: myClientId, pin: myPin });
 }
 
 joinBtn.addEventListener('click', join);
 nicknameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') join();
+});
+pinInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') join();
 });
 
@@ -80,7 +125,7 @@ nicknameInput.addEventListener('keydown', (e) => {
 // 끊겼다 다시 붙은 재연결이든 동일하게 저장된 닉네임/clientId로 자동 (재)입장함.
 socket.on('connect', () => {
   if (myNickname) {
-    socket.emit('join', { nickname: myNickname, clientId: myClientId });
+    socket.emit('join', { nickname: myNickname, clientId: myClientId, pin: myPin });
   }
 });
 
@@ -89,11 +134,23 @@ socket.on('joined', ({ nickname }) => {
   myNickname = nickname;
   hasJoined = true;
   sessionStorage.setItem(NICKNAME_KEY, nickname);
+  sessionStorage.setItem(PIN_KEY, myPin);
   loginScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
   if (firstTime) {
     messageInput.focus();
   }
+});
+
+socket.on('join-error', (msg) => {
+  // 자동 재입장 시도가 실패한 경우(비밀번호가 바뀐 등)도 포함 — 다시 입력받아야 함
+  hasJoined = false;
+  sessionStorage.removeItem(NICKNAME_KEY);
+  sessionStorage.removeItem(PIN_KEY);
+  chatScreen.classList.add('hidden');
+  loginScreen.classList.remove('hidden');
+  joinError.textContent = msg;
+  joinError.classList.remove('hidden');
 });
 
 socket.on('user-list', (users) => {
@@ -110,7 +167,88 @@ function formatTime(ts) {
   return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function appendMessage({ type, content, message, nickname, time, clientId }) {
+// --- 이모지 리액션 ---
+const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+const reactionPopup = document.createElement('div');
+reactionPopup.id = 'reaction-popup';
+reactionPopup.className = 'hidden';
+reactionPopup.innerHTML = QUICK_REACTIONS.map(
+  (e) => `<button type="button" class="reaction-pick">${e}</button>`
+).join('');
+document.body.appendChild(reactionPopup);
+let reactionPopupTarget = null;
+
+function renderReactions(container, reactionsObj) {
+  container.innerHTML = '';
+  Object.entries(reactionsObj || {}).forEach(([emoji, ids]) => {
+    if (!ids || !ids.length) return;
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'reaction-pill' + (ids.includes(myClientId) ? ' mine' : '');
+    pill.dataset.emoji = emoji;
+    pill.textContent = `${emoji} ${ids.length}`;
+    container.appendChild(pill);
+  });
+}
+
+function sendReaction(messageId, emoji) {
+  if (!messageId) return;
+  socket.emit('react', { messageId, emoji });
+}
+
+function openReactionPopup(anchorEl, messageId) {
+  reactionPopupTarget = messageId;
+  reactionPopup.classList.remove('hidden');
+
+  const rect = anchorEl.getBoundingClientRect();
+  const popupWidth = reactionPopup.offsetWidth;
+  // 화면 오른쪽/왼쪽 경계를 넘지 않도록 보정
+  let left = rect.left + window.scrollX - popupWidth / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - popupWidth - 8));
+
+  reactionPopup.style.top = `${rect.top + window.scrollY - 44}px`;
+  reactionPopup.style.left = `${left}px`;
+}
+
+reactionPopup.addEventListener('click', (e) => {
+  const btn = e.target.closest('.reaction-pick');
+  if (btn && reactionPopupTarget) {
+    sendReaction(reactionPopupTarget, btn.textContent);
+  }
+  reactionPopup.classList.add('hidden');
+});
+
+document.addEventListener('click', (e) => {
+  if (!reactionPopup.classList.contains('hidden') && !reactionPopup.contains(e.target) && !e.target.closest('.react-btn')) {
+    reactionPopup.classList.add('hidden');
+  }
+});
+
+messagesEl.addEventListener('click', (e) => {
+  const reactBtn = e.target.closest('.react-btn');
+  if (reactBtn) {
+    const msgEl = reactBtn.closest('.msg');
+    openReactionPopup(reactBtn, msgEl.dataset.messageId);
+    return;
+  }
+  const pill = e.target.closest('.reaction-pill');
+  if (pill) {
+    const msgEl = pill.closest('.msg');
+    sendReaction(msgEl.dataset.messageId, pill.dataset.emoji);
+  }
+});
+
+socket.on('reaction-update', ({ messageId, reactions }) => {
+  const msgEl = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+  if (msgEl) {
+    renderReactions(msgEl.querySelector('.msg-reactions'), reactions);
+  }
+  updateHistoryReactions(messageId, reactions);
+});
+
+// --- 메시지 렌더링 ---
+function appendMessage({ id, type, content, message, nickname, time, clientId, reactions }) {
   const div = document.createElement('div');
   const isMe = clientId === myClientId;
   // 구버전 서버 호환: type이 없으면 텍스트 메시지(message 필드)로 취급
@@ -118,10 +256,15 @@ function appendMessage({ type, content, message, nickname, time, clientId }) {
   const text = content ?? message ?? '';
 
   div.className = `msg ${isMe ? 'me' : 'other'} ${kind === 'sticker' ? 'sticker' : ''}`;
+  if (id) div.dataset.messageId = id;
   div.innerHTML = `
     ${isMe ? '' : `<div class="msg-nick">${escapeHtml(nickname)}</div>`}
     <div class="msg-body"></div>
-    <div class="msg-time">${formatTime(time)}</div>
+    <div class="msg-footer">
+      <span class="msg-time">${formatTime(time)}</span>
+      ${id ? '<button type="button" class="react-btn" aria-label="반응 추가">🙂</button>' : ''}
+    </div>
+    <div class="msg-reactions"></div>
   `;
 
   const body = div.querySelector('.msg-body');
@@ -133,6 +276,10 @@ function appendMessage({ type, content, message, nickname, time, clientId }) {
     body.appendChild(img);
   } else {
     body.textContent = text;
+  }
+
+  if (reactions) {
+    renderReactions(div.querySelector('.msg-reactions'), reactions);
   }
 
   messagesEl.appendChild(div);
@@ -153,6 +300,25 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// 탭이 안 보일 때 새 메시지가 오면 브라우저 알림을 띄움
+function maybeNotify(payload) {
+  if (typeof Notification === 'undefined') return;
+  if (Notification.permission !== 'granted') return;
+  if (payload.clientId === myClientId) return;
+  if (!document.hidden) return;
+
+  const body = payload.type === 'sticker' ? '스티커를 보냈습니다' : (payload.content ?? payload.message ?? '');
+  try {
+    const n = new Notification(payload.nickname || 'OrisChat', { body, tag: 'orischat-message' });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch {
+    // 알림 생성 실패는 무시 (필수 기능 아님)
+  }
+}
+
 // 새로고침 시 sessionStorage에 저장해둔 이전 대화를 먼저 복원
 loadHistory().forEach((entry) => {
   if (entry.kind === 'chat') appendMessage(entry.payload);
@@ -162,6 +328,7 @@ loadHistory().forEach((entry) => {
 socket.on('chat-message', (payload) => {
   appendMessage(payload);
   saveToHistory({ kind: 'chat', payload });
+  maybeNotify(payload);
 });
 
 socket.on('system-message', (text) => {
