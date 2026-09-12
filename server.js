@@ -219,9 +219,18 @@ io.on('connection', (socket) => {
   });
 });
 
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 하루에 한 번
+
 db.init()
   .catch((err) => console.error('DB 초기화 오류:', err))
   .finally(() => {
+    if (db.enabled) {
+      db.cleanupOldMessages().catch((err) => console.error('오래된 메시지 정리 오류:', err));
+      setInterval(() => {
+        db.cleanupOldMessages().catch((err) => console.error('오래된 메시지 정리 오류:', err));
+      }, CLEANUP_INTERVAL_MS);
+    }
+
     server.listen(PORT, () => {
       console.log(`채팅 서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
     });

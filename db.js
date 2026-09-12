@@ -109,4 +109,29 @@ async function toggleReaction(messageId, emoji, clientId) {
   return summary;
 }
 
-module.exports = { enabled, init, insertMessage, getRecentMessages, toggleReaction };
+const RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7일
+
+// 7일 지난 메시지와 그에 달린 리액션을 DB에서 완전히 삭제
+async function cleanupOldMessages() {
+  if (!enabled) return;
+
+  const cutoff = Date.now() - RETENTION_MS;
+  const old = await client.execute({
+    sql: 'SELECT id FROM messages WHERE time < ?',
+    args: [cutoff],
+  });
+  const ids = old.rows.map((r) => r.id);
+  if (ids.length === 0) return;
+
+  const placeholders = ids.map(() => '?').join(',');
+  await client.batch(
+    [
+      { sql: `DELETE FROM reactions WHERE message_id IN (${placeholders})`, args: ids },
+      { sql: `DELETE FROM messages WHERE id IN (${placeholders})`, args: ids },
+    ],
+    'write'
+  );
+  console.log(`오래된 메시지 ${ids.length}개(7일 경과) 삭제 완료.`);
+}
+
+module.exports = { enabled, init, insertMessage, getRecentMessages, toggleReaction, cleanupOldMessages };

@@ -339,9 +339,12 @@ function maybeNotify(payload) {
   if (payload.clientId === myClientId) return;
   if (!document.hidden) return;
 
-  const body = payload.type === 'sticker' ? '스티커를 보냈습니다' : (payload.content ?? payload.message ?? '');
+  // 메시지 내용은 알림에 노출하지 않음 (잠금화면 등에서 다른 사람이 볼 수 있어서)
   try {
-    const n = new Notification(payload.nickname || 'OrisChat', { body, tag: 'orischat-message' });
+    const n = new Notification(`${payload.nickname || '누군가'}님이 메시지를 보냈습니다`, {
+      body: '확인하려면 클릭하세요',
+      tag: 'orischat-message',
+    });
     n.onclick = () => {
       window.focus();
       n.close();
