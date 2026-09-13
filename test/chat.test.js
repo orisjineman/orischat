@@ -40,7 +40,15 @@ function waitFor(socket, event, predicate = () => true, timeoutMs = 3000) {
   });
 }
 
-function join(socket, { nickname, room, clientId }) {
+function waitForConnect(socket) {
+  if (socket.connected) return Promise.resolve();
+  return new Promise((resolve) => socket.once('connect', resolve));
+}
+
+// 소켓이 실제로 연결되기 전에 emit하면(특히 websocket 전용 트랜스포트에서) 가끔
+// 씹히는 경우가 있어서, connect를 명시적으로 기다린 뒤에 join을 보냄.
+async function join(socket, { nickname, room, clientId }) {
+  await waitForConnect(socket);
   socket.emit('join', { nickname, room, clientId: clientId || nickname });
   return waitFor(socket, 'joined');
 }

@@ -17,6 +17,20 @@ const emojiPicker = document.getElementById('emoji-picker');
 const notifyBtn = document.getElementById('notify-btn');
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const roomLabel = document.getElementById('room-label');
+const roomListEl = document.getElementById('room-list');
+const attachBtn = document.getElementById('attach-btn');
+const fileInput = document.getElementById('file-input');
+const replyBanner = document.getElementById('reply-banner');
+const replyBannerText = document.getElementById('reply-banner-text');
+const replyCancelBtn = document.getElementById('reply-cancel-btn');
+const searchBtn = document.getElementById('search-btn');
+const searchPanel = document.getElementById('search-panel');
+const searchForm = document.getElementById('search-form');
+const searchInput = document.getElementById('search-input');
+const searchCloseBtn = document.getElementById('search-close-btn');
+const searchResults = document.getElementById('search-results');
+
+const IMAGE_MAX_LENGTH = 700_000; // 서버와 동일한 상한 (대략 500KB 원본에 해당)
 
 const DEFAULT_ROOM = 'general';
 const HISTORY_PAGE_SIZE = 50;
@@ -59,6 +73,31 @@ let pushPublicKey = null;
 let pushSubscribed = false;
 
 if (roomFromUrl()) roomInput.value = roomFromUrl();
+
+// 로그인 화면에 "지금 활동 중이거나 기록이 있는 방" 목록을 보여줌 — 방 이름을
+// 정확히 몰라도 골라서 들어갈 수 있게.
+async function loadRoomList() {
+  try {
+    const res = await fetch('/api/rooms');
+    const rooms = await res.json();
+    roomListEl.innerHTML = rooms
+      .map(
+        (r) =>
+          `<button type="button" class="room-item" data-room="${escapeHtml(r.name)}">${escapeHtml(r.name)}${
+            r.activeUsers ? ` · ${r.activeUsers}명 접속중` : ''
+          }</button>`
+      )
+      .join('');
+  } catch {
+    roomListEl.innerHTML = '';
+  }
+}
+loadRoomList();
+
+roomListEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.room-item');
+  if (btn) roomInput.value = btn.dataset.room;
+});
 
 // 새로고침 시 로그인 화면이 잠깐이라도 보이지 않도록, 저장된 닉네임이 있으면
 // 곧바로 채팅 화면을 보여주고 뒤에서 재입장을 시도함.
@@ -306,7 +345,11 @@ socket.on('join-error', (msg) => {
   joinError.classList.remove('hidden');
 });
 
+// 방에 있는 사람들 닉네임 — @멘션 하이라이트를 판단할 때 씀
+let currentRoomUsers = [];
+
 socket.on('user-list', (users) => {
+  currentRoomUsers = users;
   userList.innerHTML = '';
   users.forEach((name) => {
     const li = document.createElement('li');
@@ -346,23 +389,47 @@ function nicknameInitial(name) {
   return (chars[0] || '?').toUpperCase();
 }
 
-// 메시지 안의 http(s):// 링크를 클릭 가능한 <a>로 바꿔줌 (그 외 텍스트는 그대로 escape됨)
-const URL_PATTERN = /(https?:\/\/[^\s]+)/;
-function renderLinkedText(container, text) {
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// 메시지 안의 http(s):// 링크는 클릭 가능한 <a>로, "@닉네임"(현재 방에 있는
+// 사람만)은 하이라이트로 바꿔줌. 그 외 텍스트는 그대로 텍스트 노드라 escape됨.
+function renderLinkedText(container, text, mentionNames = []) {
   container.textContent = '';
-  text.split(URL_PATTERN).forEach((part) => {
-    if (!part) return;
-    if (/^https?:\/\//.test(part)) {
+
+  // 닉네임이 다른 닉네임의 앞부분과 겹칠 수 있어서(예: "김"과 "김철수"), 긴
+  // 것부터 매칭되도록 길이 내림차순으로 정렬함.
+  const names = Array.from(new Set(mentionNames)).filter(Boolean).sort((a, b) => b.length - a.length);
+  const mentionAlternation = names.map((n) => `@${escapeRegExp(n)}`).join('|');
+  const pattern = mentionAlternation
+    ? new RegExp(`(https?:\\/\\/[^\\s]+)|(${mentionAlternation})`, 'g')
+    : /(https?:\/\/[^\s]+)/g;
+
+  let lastIndex = 0;
+  let match;
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+    }
+    if (match[1]) {
       const a = document.createElement('a');
-      a.href = part;
-      a.textContent = part;
+      a.href = match[1];
+      a.textContent = match[1];
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       container.appendChild(a);
-    } else {
-      container.appendChild(document.createTextNode(part));
+    } else if (match[2]) {
+      const span = document.createElement('span');
+      span.className = 'mention';
+      span.textContent = match[2];
+      container.appendChild(span);
     }
-  });
+    lastIndex = pattern.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    container.appendChild(document.createTextNode(text.slice(lastIndex)));
+  }
 }
 
 // --- 이모지 리액션 ---
@@ -432,6 +499,24 @@ messagesEl.addEventListener('click', (e) => {
     return;
   }
 
+  const replyBtn = e.target.closest('.reply-btn');
+  if (replyBtn) {
+    const msgEl = replyBtn.closest('.msg');
+    startReply(msgEl);
+    return;
+  }
+
+  const editBtn = e.target.closest('.edit-btn');
+  if (editBtn) {
+    const msgEl = editBtn.closest('.msg');
+    const body = msgEl.querySelector('.msg-body');
+    const newText = prompt('메시지 수정', body ? body.textContent : '');
+    if (newText != null && newText.trim() && newText.trim() !== (body ? body.textContent : '')) {
+      socket.emit('edit-message', { messageId: msgEl.dataset.messageId, content: newText.trim() });
+    }
+    return;
+  }
+
   const deleteBtn = e.target.closest('.delete-btn');
   if (deleteBtn) {
     const msgEl = deleteBtn.closest('.msg');
@@ -447,6 +532,57 @@ messagesEl.addEventListener('click', (e) => {
     sendReaction(msgEl.dataset.messageId, pill.dataset.emoji);
   }
 });
+
+socket.on('message-edited', ({ messageId, content, editedAt }) => {
+  const msgEl = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+  if (msgEl) {
+    renderLinkedText(msgEl.querySelector('.msg-body'), content, currentRoomUsers);
+    const timeEl = msgEl.querySelector('.msg-time');
+    if (timeEl && !timeEl.textContent.includes('(수정됨)')) timeEl.textContent += ' (수정됨)';
+  }
+  updateHistoryContent(messageId, content);
+});
+
+function updateHistoryContent(messageId, content) {
+  const history = loadHistory();
+  let changed = false;
+  for (const entry of history) {
+    if (entry.kind === 'chat' && entry.payload && entry.payload.id === messageId) {
+      entry.payload.content = content;
+      entry.payload.edited = true;
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      sessionStorage.setItem(historyKey(), JSON.stringify(history));
+    } catch {
+      // 무시
+    }
+  }
+}
+
+// --- 답장 ---
+let pendingReplyTo = null;
+
+function startReply(msgEl) {
+  const nickname = msgEl.classList.contains('me') ? myNickname : msgEl.querySelector('.msg-nick')?.textContent.trim() || '';
+  const body = msgEl.querySelector('.msg-body');
+  const isMedia = msgEl.querySelector('.sticker-img');
+  const preview = isMedia ? (msgEl.classList.contains('sticker') && msgEl.querySelector('.chat-image') ? '사진' : '스티커') : (body ? body.textContent : '');
+
+  pendingReplyTo = { id: msgEl.dataset.messageId, nickname, preview: preview.slice(0, 120) };
+  replyBannerText.textContent = `${nickname}님에게 답장: ${pendingReplyTo.preview}`;
+  replyBanner.classList.remove('hidden');
+  messageInput.focus();
+}
+
+function clearReply() {
+  pendingReplyTo = null;
+  replyBanner.classList.add('hidden');
+}
+
+replyCancelBtn.addEventListener('click', clearReply);
 
 socket.on('reaction-update', ({ messageId, reactions }) => {
   const msgEl = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
@@ -468,21 +604,21 @@ function applyDeletedState(msgEl) {
   if (body) body.textContent = '삭제된 메시지입니다';
   const reactionsEl = msgEl.querySelector('.msg-reactions');
   if (reactionsEl) reactionsEl.innerHTML = '';
-  const reactBtn = msgEl.querySelector('.react-btn');
-  if (reactBtn) reactBtn.remove();
-  const deleteBtn = msgEl.querySelector('.delete-btn');
-  if (deleteBtn) deleteBtn.remove();
+  ['.react-btn', '.delete-btn', '.reply-btn', '.edit-btn'].forEach((sel) => {
+    const el = msgEl.querySelector(sel);
+    if (el) el.remove();
+  });
 }
 
 // --- 메시지 렌더링 ---
-// payload: { id, type, content, nickname, time, mine, reactions, deleted }
-function buildMessageEl({ id, type, content, message, nickname, time, mine, reactions, deleted }) {
+// payload: { id, type, content, nickname, time, mine, reactions, deleted, replyTo, mentions, edited }
+function buildMessageEl({ id, type, content, message, nickname, time, mine, reactions, deleted, replyTo, edited }) {
   const div = document.createElement('div');
   // 구버전 서버 호환: type이 없으면 텍스트 메시지(message 필드)로 취급
   const kind = type || 'text';
   const text = content ?? message ?? '';
 
-  div.className = `msg ${mine ? 'me' : 'other'} ${kind === 'sticker' ? 'sticker' : ''}`;
+  div.className = `msg ${mine ? 'me' : 'other'} ${kind === 'sticker' || kind === 'image' ? 'sticker' : ''}`;
   if (id) div.dataset.messageId = id;
 
   const nickHtml = mine
@@ -491,12 +627,19 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
         nicknameInitial(nickname)
       )}</span>${escapeHtml(nickname)}</div>`;
 
+  const replyHtml = replyTo
+    ? `<div class="reply-quote">↩ ${escapeHtml(replyTo.nickname)}: ${escapeHtml(replyTo.preview)}</div>`
+    : '';
+
   div.innerHTML = `
     ${nickHtml}
+    ${replyHtml}
     <div class="msg-body"></div>
     <div class="msg-footer">
-      <span class="msg-time">${formatTime(time)}</span>
+      <span class="msg-time">${formatTime(time)}${edited ? ' (수정됨)' : ''}</span>
+      ${id && !deleted ? '<button type="button" class="reply-btn" aria-label="답장">↩</button>' : ''}
       ${id && !deleted ? '<button type="button" class="react-btn" aria-label="반응 추가">🙂</button>' : ''}
+      ${id && mine && kind === 'text' && !deleted ? '<button type="button" class="edit-btn" aria-label="수정">✏️</button>' : ''}
       ${id && mine && !deleted ? '<button type="button" class="delete-btn" aria-label="삭제">🗑</button>' : ''}
     </div>
     <div class="msg-reactions"></div>
@@ -512,8 +655,14 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
     img.alt = '스티커';
     img.className = 'sticker-img';
     body.appendChild(img);
+  } else if (kind === 'image') {
+    const img = document.createElement('img');
+    img.src = text;
+    img.alt = '사진';
+    img.className = 'sticker-img chat-image';
+    body.appendChild(img);
   } else {
-    renderLinkedText(body, text);
+    renderLinkedText(body, text, currentRoomUsers);
   }
 
   if (reactions && !deleted) {
@@ -543,17 +692,23 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-// 탭이 안 보일 때 새 메시지가 오면 브라우저 알림을 띄움 (백그라운드 푸시가 안 될 때의 대체 수단)
+// 탭이 안 보일 때 새 메시지가 오면 브라우저 알림을 띄움 (백그라운드 푸시가 안 될 때의 대체 수단).
+// 단, @멘션은 "우선 알림"이라 탭을 보고 있어도 띄움.
 function maybeNotify(payload) {
   if (pushSubscribed) return; // 푸시가 켜져 있으면 Service Worker가 알림을 담당함
   if (typeof Notification === 'undefined') return;
   if (Notification.permission !== 'granted') return;
   if (payload.mine) return;
-  if (!document.hidden) return;
+
+  const isMention = Array.isArray(payload.mentions) && payload.mentions.includes(myNickname);
+  if (!isMention && !document.hidden) return;
 
   // 메시지 내용은 알림에 노출하지 않음 (잠금화면 등에서 다른 사람이 볼 수 있어서)
+  const title = isMention
+    ? `${payload.nickname || '누군가'}님이 회원님을 언급했습니다`
+    : `${payload.nickname || '누군가'}님이 메시지를 보냈습니다`;
   try {
-    const n = new Notification(`${payload.nickname || '누군가'}님이 메시지를 보냈습니다`, {
+    const n = new Notification(title, {
       body: '확인하려면 클릭하세요',
       tag: 'orischat-message',
     });
@@ -637,11 +792,21 @@ socket.on('typing', ({ nickname, isTyping }) => {
   typingIndicator.textContent = isTyping ? `${nickname}님이 입력 중...` : '';
 });
 
+// 답장 중이면 함께 실어서 보내고, 보낸 뒤엔 답장 상태를 비움
+function sendChatMessage(data) {
+  const payload = { ...data };
+  if (pendingReplyTo) {
+    payload.replyTo = pendingReplyTo;
+    clearReply();
+  }
+  socket.emit('chat-message', payload);
+}
+
 messageForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
   if (!text) return;
-  socket.emit('chat-message', { type: 'text', content: text });
+  sendChatMessage({ type: 'text', content: text });
   messageInput.value = '';
   socket.emit('typing', false);
 });
@@ -677,7 +842,7 @@ async function buildEmojiPicker() {
 }
 
 function sendSticker(filename) {
-  socket.emit('chat-message', { type: 'sticker', content: filename });
+  sendChatMessage({ type: 'sticker', content: filename });
 }
 
 emojiBtn.addEventListener('click', async (e) => {
@@ -699,4 +864,99 @@ document.addEventListener('click', (e) => {
   if (!emojiPicker.classList.contains('hidden') && !emojiPicker.contains(e.target) && e.target !== emojiBtn) {
     emojiPicker.classList.add('hidden');
   }
+});
+
+// --- 사진 첨부 ---
+// 서버 파일시스템에는 저장 안 함(Render 무료 플랜은 재시작하면 파일이 날아감).
+// 대신 브라우저에서 캔버스로 리사이즈/압축한 뒤 base64로 DB에 저장함 — 7일 지나면
+// 자동 삭제되니 무료 DB 용량도 자연스럽게 관리됨.
+function resizeImageFile(file, maxDimension, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDimension || height > maxDimension) {
+          const scale = maxDimension / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('이미지를 읽지 못했습니다'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다'));
+    reader.readAsDataURL(file);
+  });
+}
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  fileInput.value = '';
+  if (!file) return;
+
+  try {
+    let dataUrl = await resizeImageFile(file, 1280, 0.7);
+    if (dataUrl.length > IMAGE_MAX_LENGTH) {
+      dataUrl = await resizeImageFile(file, 800, 0.5); // 그래도 크면 한 번 더 압축
+    }
+    if (dataUrl.length > IMAGE_MAX_LENGTH) {
+      alert('이미지 용량이 너무 큽니다. 더 작은 사진을 선택해주세요.');
+      return;
+    }
+    sendChatMessage({ type: 'image', content: dataUrl });
+  } catch {
+    alert('이미지를 처리하지 못했습니다.');
+  }
+});
+
+socket.on('upload-error', (msg) => {
+  alert(msg);
+});
+
+// --- 방 안 메시지 검색 ---
+searchBtn.addEventListener('click', () => {
+  searchPanel.classList.toggle('hidden');
+  if (!searchPanel.classList.contains('hidden')) searchInput.focus();
+});
+
+searchCloseBtn.addEventListener('click', () => {
+  searchPanel.classList.add('hidden');
+});
+
+searchForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const query = searchInput.value.trim();
+  if (!query) return;
+  searchResults.textContent = '검색 중...';
+  socket.emit('search-messages', { query }, (results) => {
+    if (!results || results.length === 0) {
+      searchResults.textContent = '검색 결과가 없습니다.';
+      return;
+    }
+    searchResults.innerHTML = '';
+    results
+      .slice()
+      .reverse()
+      .forEach((payload) => {
+        const item = document.createElement('div');
+        item.className = 'search-result-item';
+        const meta = document.createElement('div');
+        meta.className = 'search-result-meta';
+        meta.textContent = `${payload.nickname} · ${formatTime(payload.time)}`;
+        const body = document.createElement('div');
+        renderLinkedText(body, payload.content, currentRoomUsers);
+        item.appendChild(meta);
+        item.appendChild(body);
+        searchResults.appendChild(item);
+      });
+  });
 });

@@ -18,6 +18,10 @@ const CHAT_PIN = process.env.CHAT_PIN || '';
 
 const DEFAULT_ROOM = 'general';
 const HISTORY_PAGE_SIZE = 50;
+// base64로 인코딩된 이미지 문자열의 최대 길이 (대략 원본 이미지 500KB 정도에 해당).
+// DB(Turso 무료 티어) 용량을 지키기 위한 상한 — 클라이언트도 미리 리사이즈해서
+// 보내지만, 서버에서도 한 번 더 강제함.
+const IMAGE_MAX_LENGTH = 700_000;
 
 function cleanRoomName(name) {
   const trimmed = String(name || '').trim().slice(0, 30);
@@ -49,6 +53,13 @@ function usersInRoom(room) {
   return Array.from(users.values())
     .filter((u) => u.room === room)
     .map((u) => u.nickname);
+}
+
+// 메시지 안에서 "@닉네임" 형태로 현재 방에 있는 사람을 부르면 그 닉네임들을 반환.
+// 정규식 \b는 한글 경계를 못 잡아서, 단순 포함 여부로 확인함.
+function detectMentions(content, room) {
+  const names = Array.from(new Set(usersInRoom(room)));
+  return names.filter((name) => content.includes(`@${name}`));
 }
 
 function broadcastUserList(room) {
@@ -105,9 +116,44 @@ const messageLimiter = createLimiter(8, 5000); // 5초에 8개까지
 const reactionLimiter = createLimiter(20, 5000);
 const loadMoreLimiter = createLimiter(10, 10000);
 const deleteLimiter = createLimiter(10, 10000);
+const editLimiter = createLimiter(10, 10000);
+const searchLimiter = createLimiter(10, 10000);
 
 app.get('/api/config', (req, res) => {
   res.json({ pinRequired: Boolean(CHAT_PIN), pushPublicKey: push.enabled ? push.publicKey : null });
+});
+
+// 현재 활성 방(접속자 있음) + DB에 기록이 남아있는 방을 합쳐서 목록으로 보여줌.
+// 로그인 화면에서 "이 방들 중에 골라서 들어가기"용.
+app.get('/api/rooms', async (req, res) => {
+  const activeCounts = new Map();
+  for (const u of users.values()) {
+    activeCounts.set(u.room, (activeCounts.get(u.room) || 0) + 1);
+  }
+
+  let known = [];
+  if (db.enabled) {
+    try {
+      known = await db.getKnownRooms(50);
+    } catch (err) {
+      console.error('방 목록 조회 오류:', err);
+    }
+  }
+
+  const merged = new Map();
+  for (const row of known) {
+    merged.set(row.room, { name: row.room, activeUsers: 0, lastActivity: row.lastActivity });
+  }
+  for (const [room, count] of activeCounts.entries()) {
+    const existing = merged.get(room) || { name: room, activeUsers: 0, lastActivity: 0 };
+    existing.activeUsers = count;
+    merged.set(room, existing);
+  }
+
+  const list = Array.from(merged.values()).sort(
+    (a, b) => b.activeUsers - a.activeUsers || b.lastActivity - a.lastActivity
+  );
+  res.json(list);
 });
 
 // public/stickers 폴더에 이미지를 넣으면 자동으로 스티커로 인식됨 (서버 재시작 불필요)
@@ -234,7 +280,7 @@ io.on('connection', (socket) => {
     const room = socket.data.room;
     if (!nickname || !clientId || !room) return; // join 하지 않은 소켓의 요청은 무시
 
-    // 문자열(구버전 클라이언트)과 { type, content } 객체 둘 다 지원
+    // 문자열(구버전 클라이언트)과 { type, content, replyTo } 객체 둘 다 지원
     const data = typeof payload === 'string' ? { type: 'text', content: payload } : (payload || {});
     const id = crypto.randomUUID();
     const time = Date.now();
@@ -248,6 +294,16 @@ io.on('connection', (socket) => {
       if (!listStickers().includes(filename)) return;
       type = 'sticker';
       content = filename;
+    } else if (data.type === 'image') {
+      // 클라이언트가 이미 리사이즈/압축해서 보내지만, 용량 상한은 서버에서도 강제함
+      // (무료 DB 용량을 지키기 위함 — 7일 지나면 자동 삭제되긴 하지만 그 전까지 쌓일 수 있음)
+      const dataUrl = String(data.content || '');
+      if (!dataUrl.startsWith('data:image/') || dataUrl.length > IMAGE_MAX_LENGTH) {
+        socket.emit('upload-error', '이미지 용량이 너무 큽니다. 더 작은 사진으로 시도해주세요.');
+        return;
+      }
+      type = 'image';
+      content = dataUrl;
     } else {
       const message = String(data.content || '').trim().slice(0, 500);
       if (!message) return;
@@ -255,17 +311,30 @@ io.on('connection', (socket) => {
       content = message;
     }
 
+    // 답장 대상은 클라이언트가 보내는 스냅샷(id/닉네임/미리보기)을 그대로 신뢰하되
+    // 길이만 제한함 — 원본이 나중에 삭제되어도 답장 미리보기는 그대로 남게 하기 위함
+    let replyTo = null;
+    if (data.replyTo && data.replyTo.id) {
+      replyTo = {
+        id: String(data.replyTo.id).slice(0, 100),
+        nickname: String(data.replyTo.nickname || '').slice(0, 20),
+        preview: String(data.replyTo.preview || '').slice(0, 120),
+      };
+    }
+
+    const mentions = type === 'text' ? detectMentions(content, room) : [];
+
     rememberMessage(id, clientId, room);
 
     if (db.enabled) {
       try {
-        await db.insertMessage({ id, type, content, nickname, clientId, room, time });
+        await db.insertMessage({ id, type, content, nickname, clientId, room, time, replyTo });
       } catch (err) {
         console.error('메시지 저장 오류:', err);
       }
     }
 
-    const base = { id, type, content, nickname, time };
+    const base = { id, type, content, nickname, time, replyTo, mentions, edited: false };
     emitPersonalized(room, 'chat-message', (s) => ({
       ...base,
       mine: s.data.clientId === clientId,
@@ -348,6 +417,50 @@ io.on('connection', (socket) => {
     io.to(room).emit('message-deleted', { messageId });
   });
 
+  // 본인이 쓴 텍스트 메시지만 수정 가능. DB 없이는 원본을 서버가 따로 갖고 있지
+  // 않아서(한 번 브로드캐스트하고 끝) 수정 기능 자체가 동작하지 않음.
+  socket.on('edit-message', async ({ messageId, content } = {}) => {
+    if (!editLimiter.check(socket.id)) return;
+
+    const clientId = socket.data.clientId;
+    const room = socket.data.room;
+    if (!clientId || !room || !messageId || !db.enabled) return;
+
+    const meta = messageMeta.get(messageId);
+    if (meta && (meta.clientId !== clientId || meta.room !== room)) return;
+
+    const newContent = String(content || '').trim().slice(0, 500);
+    if (!newContent) return;
+
+    try {
+      const editedAt = await db.editMessage(messageId, clientId, newContent);
+      if (!editedAt) return; // 본인 메시지가 아니거나 이미지/스티커 등 텍스트가 아님
+      io.to(room).emit('message-edited', { messageId, content: newContent, editedAt });
+    } catch (err) {
+      console.error('메시지 수정 오류:', err);
+    }
+  });
+
+  // 방 안 메시지 검색 (DB 없으면 검색할 과거 기록이 없으므로 빈 배열만 응답)
+  socket.on('search-messages', async ({ query } = {}, callback) => {
+    if (typeof callback !== 'function') return;
+    if (!searchLimiter.check(socket.id)) return callback([]);
+
+    const room = socket.data.room;
+    const clientId = socket.data.clientId;
+    const q = String(query || '').trim().slice(0, 100);
+    if (!room || !clientId || !db.enabled || !q) return callback([]);
+
+    try {
+      const results = await db.searchMessages(room, q, 50);
+      for (const m of results) rememberMessage(m.id, m.clientId, room);
+      callback(results.map((m) => toClientMessage(m, clientId)));
+    } catch (err) {
+      console.error('검색 오류:', err);
+      callback([]);
+    }
+  });
+
   // "이전 메시지 더 보기" — DB가 없으면 더 볼 과거 기록이 없으므로 빈 배열만 응답
   socket.on('load-more', async ({ beforeTime } = {}, callback) => {
     if (typeof callback !== 'function') return;
@@ -399,6 +512,8 @@ io.on('connection', (socket) => {
     reactionLimiter.forget(socket.id);
     loadMoreLimiter.forget(socket.id);
     deleteLimiter.forget(socket.id);
+    editLimiter.forget(socket.id);
+    searchLimiter.forget(socket.id);
 
     const user = users.get(socket.id);
     if (user) {

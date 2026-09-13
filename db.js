@@ -9,14 +9,13 @@ const authToken = process.env.TURSO_AUTH_TOKEN;
 const enabled = Boolean(url);
 const client = enabled ? createClient({ url, authToken }) : null;
 
-// room 기능 추가 전에 만들어진 기존 DB에는 messages.room 컬럼이 없을 수 있어서,
-// 컬럼이 정말 없을 때만 ALTER TABLE로 보강함 (매번 시도하면 이미 있을 때 에러 로그만
-// 계속 쌓여서, PRAGMA로 먼저 확인함)
-async function migrateRoomColumn() {
-  const info = await client.execute('PRAGMA table_info(messages)');
-  const hasRoom = info.rows.some((r) => r.name === 'room');
-  if (!hasRoom) {
-    await client.execute(`ALTER TABLE messages ADD COLUMN room TEXT NOT NULL DEFAULT 'general'`);
+// 기존에 만들어진 DB에 새 컬럼이 없을 수 있어서, 정말 없을 때만 ALTER TABLE로
+// 보강함 (매번 시도하면 이미 있을 때 에러 로그만 계속 쌓여서, PRAGMA로 먼저 확인함)
+async function ensureColumn(table, column, definition) {
+  const info = await client.execute(`PRAGMA table_info(${table})`);
+  const hasColumn = info.rows.some((r) => r.name === column);
+  if (!hasColumn) {
+    await client.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
 }
 
@@ -54,18 +53,75 @@ async function init() {
     ],
     'write'
   );
-  await migrateRoomColumn();
+  await ensureColumn('messages', 'room', `TEXT NOT NULL DEFAULT 'general'`);
+  await ensureColumn('messages', 'reply_to', 'TEXT');
+  await ensureColumn('messages', 'edited_at', 'INTEGER');
   await client.execute(`CREATE INDEX IF NOT EXISTS idx_messages_room_time ON messages(room, time)`);
   await client.execute(`CREATE INDEX IF NOT EXISTS idx_push_room ON push_subscriptions(room)`);
   console.log('Turso DB 연결/초기화 완료.');
 }
 
-async function insertMessage({ id, type, content, nickname, clientId, room, time }) {
+async function insertMessage({ id, type, content, nickname, clientId, room, time, replyTo }) {
   if (!enabled) return;
   await client.execute({
-    sql: 'INSERT INTO messages (id, type, content, nickname, client_id, room, time) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    args: [id, type, content, nickname, clientId, room, time],
+    sql: 'INSERT INTO messages (id, type, content, nickname, client_id, room, time, reply_to) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    args: [id, type, content, nickname, clientId, room, time, replyTo ? JSON.stringify(replyTo) : null],
   });
+}
+
+// 본인 텍스트 메시지만 수정 가능. clientId가 실제 작성자와 일치할 때만 수정.
+async function editMessage(id, clientId, newContent) {
+  if (!enabled) return false;
+
+  const existing = await client.execute({
+    sql: "SELECT client_id as clientId FROM messages WHERE id = ? AND type = 'text'",
+    args: [id],
+  });
+  const row = existing.rows[0];
+  if (!row || row.clientId !== clientId) return false;
+
+  const editedAt = Date.now();
+  await client.execute({
+    sql: 'UPDATE messages SET content = ?, edited_at = ? WHERE id = ?',
+    args: [newContent, editedAt, id],
+  });
+  return editedAt;
+}
+
+// 방 안 메시지 중 content에 query가 포함된 것을 최신순으로 최대 limit개 반환
+async function searchMessages(room, query, limit = 50) {
+  if (!enabled) return [];
+  const result = await client.execute({
+    sql: `SELECT id, type, content, nickname, client_id as clientId, time FROM messages
+          WHERE room = ? AND type = 'text' AND content LIKE ? ESCAPE '\\' ORDER BY time DESC LIMIT ?`,
+    args: [room, `%${query.replace(/[\\%_]/g, '\\$&')}%`, limit],
+  });
+  return result.rows;
+}
+
+// 현재까지 메시지가 한 번이라도 오간 방 목록과, 방별 마지막 활동 시각/메시지 수
+async function getKnownRooms(limit = 50) {
+  if (!enabled) return [];
+  const result = await client.execute({
+    sql: `SELECT room, COUNT(*) as messageCount, MAX(time) as lastActivity
+          FROM messages GROUP BY room ORDER BY lastActivity DESC LIMIT ?`,
+    args: [limit],
+  });
+  return result.rows;
+}
+
+// reply_to는 DB에 JSON 문자열로 저장되어 있어서 객체로 풀어줌
+function parseReplyTo(row) {
+  let replyTo = null;
+  if (row.replyTo) {
+    try {
+      replyTo = JSON.parse(row.replyTo);
+    } catch {
+      replyTo = null;
+    }
+  }
+  const { replyTo: _drop, ...rest } = row;
+  return { ...rest, replyTo, edited: Boolean(row.editedAt) };
 }
 
 // 여러 메시지에 리액션 정보를 붙여서 반환 (내부 헬퍼)
@@ -90,15 +146,18 @@ async function attachReactions(messages) {
   return messages.map((m) => ({ ...m, reactions: reactionsByMessage.get(m.id) || {} }));
 }
 
+const MESSAGE_COLUMNS =
+  'id, type, content, nickname, client_id as clientId, time, reply_to as replyTo, edited_at as editedAt';
+
 // 해당 방의 최근 메시지 최대 limit개를 시간순(오래된 것부터)으로 반환
 async function getRecentMessages(room, limit = 50) {
   if (!enabled) return [];
 
   const result = await client.execute({
-    sql: 'SELECT id, type, content, nickname, client_id as clientId, time FROM messages WHERE room = ? ORDER BY time DESC LIMIT ?',
+    sql: `SELECT ${MESSAGE_COLUMNS} FROM messages WHERE room = ? ORDER BY time DESC LIMIT ?`,
     args: [room, limit],
   });
-  return attachReactions(result.rows.reverse());
+  return attachReactions(result.rows.reverse().map(parseReplyTo));
 }
 
 // beforeTime보다 이전(오래된) 메시지를 최대 limit개, 시간순(오래된 것부터)으로 반환.
@@ -107,10 +166,10 @@ async function getMessagesBefore(room, beforeTime, limit = 50) {
   if (!enabled) return [];
 
   const result = await client.execute({
-    sql: 'SELECT id, type, content, nickname, client_id as clientId, time FROM messages WHERE room = ? AND time < ? ORDER BY time DESC LIMIT ?',
+    sql: `SELECT ${MESSAGE_COLUMNS} FROM messages WHERE room = ? AND time < ? ORDER BY time DESC LIMIT ?`,
     args: [room, beforeTime, limit],
   });
-  return attachReactions(result.rows.reverse());
+  return attachReactions(result.rows.reverse().map(parseReplyTo));
 }
 
 // 이미 눌렀던 반응이면 취소(토글), 아니면 추가. 최신 반응 요약을 반환함.
@@ -225,6 +284,9 @@ module.exports = {
   enabled,
   init,
   insertMessage,
+  editMessage,
+  searchMessages,
+  getKnownRooms,
   getRecentMessages,
   getMessagesBefore,
   toggleReaction,
