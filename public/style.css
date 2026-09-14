@@ -112,6 +112,14 @@ body {
   background: var(--bubble-other);
 }
 
+/* 헤더 버튼 안에 들어가는 내 프로필 사진/이니셜 — 기본 .msg-avatar는
+   메시지 옆에 쓰는 18px짜리라, 버튼을 꽉 채우도록 덮어씀 */
+#avatar-btn .msg-avatar {
+  width: 100%;
+  height: 100%;
+  font-size: 13px;
+}
+
 /* 로그인 화면 */
 #login-screen {
   align-items: center;

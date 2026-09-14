@@ -342,6 +342,7 @@ socket.on('joined', ({ nickname, room }) => {
   updateUrlForRoom(room);
   loginScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
+  refreshMyAvatarButton();
   if (firstTime) {
     messageInput.focus();
   }
@@ -1073,6 +1074,17 @@ function resizeImageSquare(file, size, quality) {
   });
 }
 
+// 내 메시지 말풍선엔 원래 닉네임/아바타를 안 보여줘서(색으로만 구분), 프로필
+// 사진을 올려도 확인할 방법이 없었음 — 헤더 버튼 자체가 내 현재 프로필 사진을
+// 보여주게 해서 바로 확인 가능하게 함.
+function refreshMyAvatarButton() {
+  if (!myNickname) return;
+  avatarBtn.innerHTML = '';
+  const el = createAvatarEl(myNickname);
+  el.classList.add('avatar-btn-img');
+  avatarBtn.appendChild(el);
+}
+
 avatarBtn.addEventListener('click', () => avatarFileInput.click());
 
 avatarFileInput.addEventListener('change', async () => {
@@ -1095,6 +1107,7 @@ avatarFileInput.addEventListener('change', async () => {
     document.querySelectorAll(`[data-avatar-nickname="${CSS.escape(myNickname)}"]`).forEach((el) => {
       el.replaceWith(createAvatarEl(myNickname));
     });
+    refreshMyAvatarButton();
   } catch {
     alert('이미지를 처리하지 못했습니다.');
   }
@@ -1102,6 +1115,7 @@ avatarFileInput.addEventListener('change', async () => {
 
 socket.on('avatar-updated', ({ nickname, updatedAt }) => {
   avatarVersions.set(nickname, updatedAt);
+  if (nickname === myNickname) refreshMyAvatarButton();
   document.querySelectorAll(`[data-avatar-nickname="${CSS.escape(nickname)}"]`).forEach((el) => {
     el.replaceWith(createAvatarEl(nickname));
   });
