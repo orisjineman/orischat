@@ -22,6 +22,8 @@ const HISTORY_PAGE_SIZE = 50;
 // DB(Turso 무료 티어) 용량을 지키기 위한 상한 — 클라이언트도 미리 리사이즈해서
 // 보내지만, 서버에서도 한 번 더 강제함.
 const IMAGE_MAX_LENGTH = 700_000;
+// 프로필 사진은 훨씬 작게(정사각형 썸네일) 보내므로 상한도 더 낮게 둠
+const AVATAR_MAX_LENGTH = 250_000;
 
 function cleanRoomName(name) {
   const trimmed = String(name || '').trim().slice(0, 30);
@@ -49,6 +51,14 @@ function rememberMessage(id, clientId, room) {
 // 있으면 db.js가 진짜 저장소 역할을 함.
 const reactions = new Map();
 
+// 프로필 사진 메모리 폴백 (DB 미설정 시): nickname -> { image, updatedAt }
+const avatars = new Map();
+
+// 읽음 표시: room -> Map<clientId, lastReadTime>. 재시작하면 초기화되지만,
+// "현재 접속 중인 사람들이 어디까지 읽었는지"만 다루므로 굳이 DB에 남길
+// 필요는 없음(재연결하면 다시 join 시점 기준으로 채워짐).
+const lastRead = new Map();
+
 function usersInRoom(room) {
   return Array.from(users.values())
     .filter((u) => u.room === room)
@@ -64,6 +74,22 @@ function detectMentions(content, room) {
 
 function broadcastUserList(room) {
   io.to(room).emit('user-list', usersInRoom(room));
+}
+
+// 방에 있는 각 사람에게 "나를 제외한 나머지가 최소 어디까지 읽었는지" 시각을
+// 계산해서 보내줌 — 내가 보낸 메시지의 시각이 이 값보다 작거나 같으면
+// "방에 있는 모두가 읽었다"는 뜻이라 클라이언트에서 "읽음"으로 표시함.
+function broadcastReadUpdate(room) {
+  const roomLastRead = lastRead.get(room);
+
+  emitPersonalized(room, 'read-update', (s) => {
+    let min = Infinity;
+    for (const [, socket] of io.sockets.sockets) {
+      if (socket.data.room !== room || socket.data.clientId === s.data.clientId) continue;
+      min = Math.min(min, (roomLastRead && roomLastRead.get(socket.data.clientId)) || 0);
+    }
+    return { minReadTime: Number.isFinite(min) ? min : 0 };
+  });
 }
 
 // room 안의 모든 소켓에게 "각자 다른 내용"을 담아 개별적으로 전송함. 예를 들어
@@ -118,9 +144,37 @@ const loadMoreLimiter = createLimiter(10, 10000);
 const deleteLimiter = createLimiter(10, 10000);
 const editLimiter = createLimiter(10, 10000);
 const searchLimiter = createLimiter(10, 10000);
+const avatarLimiter = createLimiter(5, 60000);
+const readLimiter = createLimiter(30, 5000);
 
 app.get('/api/config', (req, res) => {
   res.json({ pinRequired: Boolean(CHAT_PIN), pushPublicKey: push.enabled ? push.publicKey : null });
+});
+
+// 프로필 사진 서빙: data URL로 저장해둔 걸 실제 이미지 바이트로 디코딩해서 내려줌
+// (소켓으로 매번 base64를 실어보내는 대신, 브라우저가 URL 기준으로 캐시할 수 있게).
+app.get('/avatar/:nickname', async (req, res) => {
+  const nickname = req.params.nickname.slice(0, 20);
+  let avatar = null;
+
+  if (db.enabled) {
+    try {
+      avatar = await db.getAvatar(nickname);
+    } catch (err) {
+      console.error('프로필 사진 조회 오류:', err);
+    }
+  } else {
+    avatar = avatars.get(nickname) || null;
+  }
+
+  if (!avatar) return res.status(404).end();
+
+  const match = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(avatar.image);
+  if (!match) return res.status(404).end();
+
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.set('Content-Type', match[1]);
+  res.send(Buffer.from(match[2], 'base64'));
 });
 
 // 현재 활성 방(접속자 있음) + DB에 기록이 남아있는 방을 합쳐서 목록으로 보여줌.
@@ -258,6 +312,8 @@ io.on('connection', (socket) => {
     socket.emit('joined', { nickname: cleanName, clientId: id, room: roomName });
     socket.broadcast.to(roomName).emit('system-message', `${cleanName}님이 입장했습니다.`);
     broadcastUserList(roomName);
+    // 새로 들어온 사람이 room의 "다들 어디까지 읽었나" 기준에도 영향을 주므로 갱신
+    broadcastReadUpdate(roomName);
 
     if (db.enabled) {
       db.getRecentMessages(roomName, HISTORY_PAGE_SIZE)
@@ -500,6 +556,53 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 프로필 사진 설정 (닉네임 기준으로 저장 — 방/기기 안 가리고 그 닉네임을
+  // 쓰는 동안 계속 보임). 클라이언트가 미리 리사이즈해서 보내지만 서버에서도
+  // 크기 상한을 강제함.
+  socket.on('set-avatar', async ({ content } = {}) => {
+    if (!avatarLimiter.check(socket.id)) return;
+
+    const nickname = socket.data.nickname;
+    if (!nickname) return;
+
+    const dataUrl = String(content || '');
+    if (!dataUrl.startsWith('data:image/') || dataUrl.length > AVATAR_MAX_LENGTH) {
+      socket.emit('upload-error', '프로필 사진 용량이 너무 큽니다. 더 작은 사진으로 시도해주세요.');
+      return;
+    }
+
+    if (db.enabled) {
+      try {
+        await db.setAvatar(nickname, dataUrl);
+      } catch (err) {
+        console.error('프로필 사진 저장 오류:', err);
+        return;
+      }
+    } else {
+      avatars.set(nickname, { image: dataUrl, updatedAt: Date.now() });
+    }
+
+    io.to(socket.data.room).emit('avatar-updated', { nickname, updatedAt: Date.now() });
+  });
+
+  // 읽음 표시: "이 시각까지의 메시지를 봤다"고 알려줌. 방에 있는 모두가 특정
+  // 메시지 시각 이상으로 읽음 표시를 하면, 그 메시지를 보낸 사람 화면에
+  // "읽음"이 뜸.
+  socket.on('mark-read', ({ time } = {}) => {
+    if (!readLimiter.check(socket.id)) return;
+
+    const room = socket.data.room;
+    const clientId = socket.data.clientId;
+    if (!room || !clientId || !time) return;
+
+    if (!lastRead.has(room)) lastRead.set(room, new Map());
+    const roomMap = lastRead.get(room);
+    if ((roomMap.get(clientId) || 0) >= time) return; // 이미 그만큼은 읽음 처리됨
+
+    roomMap.set(clientId, time);
+    broadcastReadUpdate(room);
+  });
+
   socket.on('typing', (isTyping) => {
     const nickname = socket.data.nickname;
     const room = socket.data.room;
@@ -514,12 +617,18 @@ io.on('connection', (socket) => {
     deleteLimiter.forget(socket.id);
     editLimiter.forget(socket.id);
     searchLimiter.forget(socket.id);
+    avatarLimiter.forget(socket.id);
+    readLimiter.forget(socket.id);
 
     const user = users.get(socket.id);
     if (user) {
       users.delete(socket.id);
       socket.broadcast.to(user.room).emit('system-message', `${user.nickname}님이 퇴장했습니다.`);
       broadcastUserList(user.room);
+      // 나간 사람 기준으로 "다들 어디까지 읽었나"가 바뀔 수 있으니 다시 계산
+      const roomMap = lastRead.get(user.room);
+      if (roomMap) roomMap.delete(socket.data.clientId);
+      broadcastReadUpdate(user.room);
     }
   });
 });

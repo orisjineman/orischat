@@ -29,6 +29,8 @@ const searchForm = document.getElementById('search-form');
 const searchInput = document.getElementById('search-input');
 const searchCloseBtn = document.getElementById('search-close-btn');
 const searchResults = document.getElementById('search-results');
+const avatarBtn = document.getElementById('avatar-btn');
+const avatarFileInput = document.getElementById('avatar-file-input');
 const imageLightbox = document.getElementById('image-lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
 const lightboxCloseBtn = document.getElementById('lightbox-close-btn');
@@ -74,6 +76,12 @@ let typingTimeout = null;
 let oldestMessageTime = null;
 let pushPublicKey = null;
 let pushSubscribed = false;
+let latestMessageTime = 0; // 읽음 표시용 — 지금까지 화면에 그려진 메시지 중 가장 최신 시각
+let roomMinReadTime = 0; // 나를 제외한 방 안 모두가 최소 어디까지 읽었는지
+
+// 닉네임 -> 프로필 사진 버전(updatedAt). 캐시 무효화(cache-busting)용 —
+// 사진이 바뀌면 버전도 바뀌어서 브라우저가 새로 받아오게 됨.
+const avatarVersions = new Map();
 
 if (roomFromUrl()) roomInput.value = roomFromUrl();
 
@@ -325,6 +333,8 @@ socket.on('joined', ({ nickname, room }) => {
   myNickname = nickname;
   myRoom = room;
   hasJoined = true;
+  latestMessageTime = 0;
+  roomMinReadTime = 0;
   sessionStorage.setItem(NICKNAME_KEY, nickname);
   sessionStorage.setItem(PIN_KEY, myPin);
   sessionStorage.setItem(ROOM_KEY, room);
@@ -501,6 +511,12 @@ messagesEl.addEventListener('click', (e) => {
     return;
   }
 
+  const replyQuote = e.target.closest('.reply-quote');
+  if (replyQuote) {
+    scrollToMessage(replyQuote.dataset.replyTarget);
+    return;
+  }
+
   const reactBtn = e.target.closest('.react-btn');
   if (reactBtn) {
     const msgEl = reactBtn.closest('.msg');
@@ -619,6 +635,26 @@ function applyDeletedState(msgEl) {
   });
 }
 
+// 프로필 사진(닉네임 기준)이 있으면 그걸, 없으면(또는 로드 실패하면) 이니셜
+// 배지를 보여주는 엘리먼트를 만듦. avatar-updated 이벤트가 오면 이 함수로
+// 다시 만들어서 교체함.
+function createAvatarEl(nickname) {
+  const img = document.createElement('img');
+  img.className = 'msg-avatar msg-avatar-img';
+  img.alt = '';
+  img.dataset.avatarNickname = nickname;
+  img.src = `/avatar/${encodeURIComponent(nickname)}?v=${avatarVersions.get(nickname) || 0}`;
+  img.onerror = () => {
+    const span = document.createElement('span');
+    span.className = 'msg-avatar';
+    span.style.background = nicknameColor(nickname);
+    span.textContent = nicknameInitial(nickname);
+    span.dataset.avatarNickname = nickname;
+    img.replaceWith(span);
+  };
+  return img;
+}
+
 // --- 메시지 렌더링 ---
 // payload: { id, type, content, nickname, time, mine, reactions, deleted, replyTo, mentions, edited }
 function buildMessageEl({ id, type, content, message, nickname, time, mine, reactions, deleted, replyTo, edited }) {
@@ -629,23 +665,20 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
 
   div.className = `msg ${mine ? 'me' : 'other'} ${kind === 'sticker' || kind === 'image' ? 'sticker' : ''}`;
   if (id) div.dataset.messageId = id;
-
-  const nickHtml = mine
-    ? ''
-    : `<div class="msg-nick"><span class="msg-avatar" style="background:${nicknameColor(nickname)}">${escapeHtml(
-        nicknameInitial(nickname)
-      )}</span>${escapeHtml(nickname)}</div>`;
+  if (time) div.dataset.time = time;
 
   const replyHtml = replyTo
-    ? `<div class="reply-quote">↩ ${escapeHtml(replyTo.nickname)}: ${escapeHtml(replyTo.preview)}</div>`
+    ? `<div class="reply-quote" data-reply-target="${escapeHtml(replyTo.id)}">↩ ${escapeHtml(
+        replyTo.nickname
+      )}: ${escapeHtml(replyTo.preview)}</div>`
     : '';
 
   div.innerHTML = `
-    ${nickHtml}
     ${replyHtml}
     <div class="msg-body"></div>
     <div class="msg-footer">
       <span class="msg-time">${formatTime(time)}${edited ? ' (수정됨)' : ''}</span>
+      ${mine && !deleted ? '<span class="read-status"></span>' : ''}
       ${id && !deleted ? '<button type="button" class="reply-btn" aria-label="답장">↩</button>' : ''}
       ${id && !deleted ? '<button type="button" class="react-btn" aria-label="반응 추가">🙂</button>' : ''}
       ${id && mine && kind === 'text' && !deleted ? '<button type="button" class="edit-btn" aria-label="수정">✏️</button>' : ''}
@@ -653,6 +686,14 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
     </div>
     <div class="msg-reactions"></div>
   `;
+
+  if (!mine) {
+    const nickDiv = document.createElement('div');
+    nickDiv.className = 'msg-nick';
+    nickDiv.appendChild(createAvatarEl(nickname));
+    nickDiv.appendChild(document.createTextNode(nickname));
+    div.insertBefore(nickDiv, div.firstChild);
+  }
 
   const body = div.querySelector('.msg-body');
   if (deleted) {
@@ -776,6 +817,8 @@ socket.on('chat-message', (payload) => {
   appendMessage(payload);
   saveToHistory({ kind: 'chat', payload });
   maybeNotify(payload);
+  if (payload.time > latestMessageTime) latestMessageTime = payload.time;
+  maybeMarkRead();
 });
 
 // 서버가 DB에서 불러온 진짜 대화 기록(최근 페이지 하나 분량). sessionStorage
@@ -789,6 +832,8 @@ socket.on('history', (messages) => {
     saveToHistory({ kind: 'chat', payload });
   });
   oldestMessageTime = messages.length ? messages[0].time : null;
+  if (messages.length) latestMessageTime = messages[messages.length - 1].time;
+  maybeMarkRead();
   loadMoreBtn.classList.toggle('hidden', messages.length < HISTORY_PAGE_SIZE);
 });
 
@@ -991,4 +1036,99 @@ lightboxImg.addEventListener('click', (e) => e.stopPropagation());
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && !imageLightbox.classList.contains('hidden')) closeLightbox();
+});
+
+// --- 답장 인용 클릭 시 원본 메시지로 스크롤 ---
+function scrollToMessage(messageId) {
+  if (!messageId) return;
+  const target = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+  if (!target) return; // "이전 메시지 더 보기"로 아직 안 불러온 경우 등 — 조용히 무시
+
+  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  target.classList.add('flash-highlight');
+  setTimeout(() => target.classList.remove('flash-highlight'), 1200);
+}
+
+// --- 프로필 사진 설정 ---
+function resizeImageSquare(file, size, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = () => reject(new Error('이미지를 읽지 못했습니다'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다'));
+    reader.readAsDataURL(file);
+  });
+}
+
+avatarBtn.addEventListener('click', () => avatarFileInput.click());
+
+avatarFileInput.addEventListener('change', async () => {
+  const file = avatarFileInput.files[0];
+  avatarFileInput.value = '';
+  if (!file) return;
+
+  try {
+    let dataUrl = await resizeImageSquare(file, 200, 0.85);
+    if (dataUrl.length > 250_000) {
+      dataUrl = await resizeImageSquare(file, 120, 0.7); // 그래도 크면 한 번 더 압축
+    }
+    if (dataUrl.length > 250_000) {
+      alert('프로필 사진 용량이 너무 큽니다. 더 작은 사진을 선택해주세요.');
+      return;
+    }
+    socket.emit('set-avatar', { content: dataUrl });
+    // 서버 브로드캐스트가 오기 전에도 내 화면엔 바로 반영되게(체감 지연 줄이기)
+    avatarVersions.set(myNickname, Date.now());
+    document.querySelectorAll(`[data-avatar-nickname="${CSS.escape(myNickname)}"]`).forEach((el) => {
+      el.replaceWith(createAvatarEl(myNickname));
+    });
+  } catch {
+    alert('이미지를 처리하지 못했습니다.');
+  }
+});
+
+socket.on('avatar-updated', ({ nickname, updatedAt }) => {
+  avatarVersions.set(nickname, updatedAt);
+  document.querySelectorAll(`[data-avatar-nickname="${CSS.escape(nickname)}"]`).forEach((el) => {
+    el.replaceWith(createAvatarEl(nickname));
+  });
+});
+
+// --- 읽음 표시 ---
+// 탭이 보이는 상태에서만 "읽었다"고 보냄 — 백그라운드에 있는데 읽음 처리되는 건
+// 이상하니까.
+function maybeMarkRead() {
+  if (document.hidden || !latestMessageTime) return;
+  socket.emit('mark-read', { time: latestMessageTime });
+}
+
+function updateReadStatuses() {
+  messagesEl.querySelectorAll('.msg.me[data-time]').forEach((el) => {
+    const statusEl = el.querySelector('.read-status');
+    if (!statusEl) return;
+    const time = Number(el.dataset.time);
+    statusEl.textContent = roomMinReadTime > 0 && time <= roomMinReadTime ? '읽음' : '';
+  });
+}
+
+socket.on('read-update', ({ minReadTime }) => {
+  roomMinReadTime = minReadTime || 0;
+  updateReadStatuses();
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) maybeMarkRead();
 });
