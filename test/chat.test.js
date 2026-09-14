@@ -45,6 +45,19 @@ function waitForConnect(socket) {
   return new Promise((resolve) => socket.once('connect', resolve));
 }
 
+// close()만 부르고 완전히 끝나길 안 기다리면, 다음 테스트가 새 소켓을 여는
+// 시점과 엔진 레벨에서 겹쳐서 가끔 패킷이 씹히는 것으로 보임(디버그 로그로
+// 확인함). disconnect가 실제로 될 때까지 기다린 뒤 다음 테스트로 넘어가게 함.
+function closeClient(socket) {
+  return new Promise((resolve) => {
+    if (!socket.connected) return resolve();
+    const done = () => resolve();
+    socket.once('disconnect', done);
+    socket.close();
+    setTimeout(done, 300); // disconnect 이벤트가 안 오는 극단적 케이스를 위한 안전장치
+  });
+}
+
 // 소켓이 실제로 연결되기 전에 emit하면(특히 websocket 전용 트랜스포트에서) 가끔
 // 씹히는 경우가 있어서, connect를 명시적으로 기다린 뒤에 join을 보냄.
 async function join(socket, { nickname, room, clientId }) {
@@ -60,7 +73,7 @@ test('입장하면 닉네임/방 정보를 받는다', async () => {
     assert.equal(joined.nickname, 'alice');
     assert.equal(joined.room, 'test-basic');
   } finally {
-    alice.close();
+    await closeClient(alice);
   }
 });
 
@@ -71,9 +84,14 @@ test('내가 보낸 메시지는 mine:true로, 다른 사람 것은 mine:false�
     await join(alice, { nickname: 'alice', room: 'test-mine' });
     await join(bob, { nickname: 'bob', room: 'test-mine' });
 
+    // 두 소켓 모두 리스너를 먼저 걸어둔 뒤에 emit해야 함. 순서를 반대로 하면
+    // (emit → alice 기다림 → bob 기다림) 서버가 거의 동시에 보내는 두 패킷 중
+    // bob 몫이 bob용 리스너가 걸리기도 전에 도착해서 그냥 사라져버릴 수 있음
+    // (Socket.IO는 나중에 붙는 리스너를 위해 지난 이벤트를 보관해주지 않음).
+    const aliceMsgPromise = waitFor(alice, 'chat-message', (m) => m.content === '안녕');
+    const bobMsgPromise = waitFor(bob, 'chat-message', (m) => m.content === '안녕');
     alice.emit('chat-message', { type: 'text', content: '안녕' });
-    const aliceView = await waitFor(alice, 'chat-message', (m) => m.content === '안녕');
-    const bobView = await waitFor(bob, 'chat-message', (m) => m.content === '안녕');
+    const [aliceView, bobView] = await Promise.all([aliceMsgPromise, bobMsgPromise]);
 
     assert.equal(aliceView.mine, true);
     assert.equal(bobView.mine, false);
@@ -81,8 +99,8 @@ test('내가 보낸 메시지는 mine:true로, 다른 사람 것은 mine:false�
     // 다른 사람에게는 영구 식별자(clientId)가 그대로 노출되면 안 됨
     assert.equal('clientId' in bobView, false);
   } finally {
-    alice.close();
-    bob.close();
+    await closeClient(alice);
+    await closeClient(bob);
   }
 });
 
@@ -105,8 +123,8 @@ test('서로 다른 방은 메시지가 섞이지 않는다', async () => {
     await new Promise((r) => setTimeout(r, 200));
     assert.equal(leaked, false);
   } finally {
-    alice.close();
-    carol.close();
+    await closeClient(alice);
+    await closeClient(carol);
   }
 });
 
@@ -120,17 +138,19 @@ test('이모지 리액션은 누른 사람 기준 mine이 다르게 보인다', 
     bob.emit('chat-message', { type: 'text', content: '반응해줘' });
     const msg = await waitFor(alice, 'chat-message', (m) => m.content === '반응해줘');
 
+    // (위 mine:true 테스트와 같은 이유로) 두 리스너를 먼저 걸어두고 emit함
+    const aliceReactionPromise = waitFor(alice, 'reaction-update', (u) => u.messageId === msg.id);
+    const bobReactionPromise = waitFor(bob, 'reaction-update', (u) => u.messageId === msg.id);
     alice.emit('react', { messageId: msg.id, emoji: '👍' });
-    const aliceView = await waitFor(alice, 'reaction-update', (u) => u.messageId === msg.id);
-    const bobView = await waitFor(bob, 'reaction-update', (u) => u.messageId === msg.id);
+    const [aliceView, bobView] = await Promise.all([aliceReactionPromise, bobReactionPromise]);
 
     assert.equal(aliceView.reactions['👍'].count, 1);
     assert.equal(aliceView.reactions['👍'].mine, true);
     assert.equal(bobView.reactions['👍'].count, 1);
     assert.equal(bobView.reactions['👍'].mine, false);
   } finally {
-    alice.close();
-    bob.close();
+    await closeClient(alice);
+    await closeClient(bob);
   }
 });
 
@@ -160,8 +180,8 @@ test('본인 메시지만 삭제할 수 있다', async () => {
     const deleted = await waitFor(bob, 'message-deleted', (d) => d.messageId === msg.id);
     assert.equal(deleted.messageId, msg.id);
   } finally {
-    alice.close();
-    bob.close();
+    await closeClient(alice);
+    await closeClient(bob);
   }
 });
 
@@ -177,6 +197,6 @@ test('짧은 시간에 메시지를 너무 많이 보내면 rate-limited가 온�
     const limited = await limitedPromise;
     assert.equal(limited.action, 'chat-message');
   } finally {
-    alice.close();
+    await closeClient(alice);
   }
 });
