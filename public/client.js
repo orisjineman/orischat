@@ -31,6 +31,7 @@ const searchCloseBtn = document.getElementById('search-close-btn');
 const searchResults = document.getElementById('search-results');
 const avatarBtn = document.getElementById('avatar-btn');
 const avatarFileInput = document.getElementById('avatar-file-input');
+const scrollBottomBtn = document.getElementById('scroll-bottom-btn');
 const imageLightbox = document.getElementById('image-lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
 const lightboxCloseBtn = document.getElementById('lightbox-close-btn');
@@ -723,19 +724,47 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
   return div;
 }
 
+// 대화를 위로 스크롤해서 지난 메시지를 읽던 중이면, 새 메시지가 와도 화면을
+// 억지로 맨 아래로 당기지 않음 — 이미 맨 아래 근처에 있을 때만 자동으로
+// 따라 내려감. 그 외엔 스크롤 버튼을 보여줘서 원할 때 이동하게 함.
+const NEAR_BOTTOM_THRESHOLD = 80;
+function isNearBottom() {
+  return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < NEAR_BOTTOM_THRESHOLD;
+}
+
+function scrollToBottom(behavior = 'auto') {
+  messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior });
+  scrollBottomBtn.classList.add('hidden');
+}
+
 function appendMessage(payload) {
+  const wasNearBottom = isNearBottom();
   const div = buildMessageEl(payload);
   messagesEl.appendChild(div);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  if (wasNearBottom) {
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  } else {
+    scrollBottomBtn.classList.remove('hidden');
+  }
 }
 
 function appendSystemMessage(text) {
+  const wasNearBottom = isNearBottom();
   const div = document.createElement('div');
   div.className = 'msg system';
   div.textContent = text;
   messagesEl.appendChild(div);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  if (wasNearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
+
+scrollBottomBtn.addEventListener('click', () => scrollToBottom('smooth'));
+
+// 위로 스크롤해서 지난 대화를 보고 있으면 버튼을 보여주고, 맨 아래 근처로
+// 돌아오면 다시 숨김 — 새 메시지가 왔을 때뿐 아니라 언제든 쓸 수 있게 함
+messagesEl.addEventListener('scroll', () => {
+  const scrollable = messagesEl.scrollHeight > messagesEl.clientHeight + NEAR_BOTTOM_THRESHOLD;
+  scrollBottomBtn.classList.toggle('hidden', !scrollable || isNearBottom());
+});
 
 function escapeHtml(str) {
   const div = document.createElement('div');
