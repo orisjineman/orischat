@@ -65,6 +65,12 @@
     </main>
   </div>
 
+  <!-- 사진/스티커 클릭 시 확대해서 보는 라이트박스 -->
+  <div id="image-lightbox" class="hidden">
+    <img id="lightbox-img" alt="확대된 이미지" />
+    <button type="button" id="lightbox-close-btn" aria-label="닫기">✕</button>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>

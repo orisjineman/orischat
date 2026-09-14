@@ -29,6 +29,9 @@ const searchForm = document.getElementById('search-form');
 const searchInput = document.getElementById('search-input');
 const searchCloseBtn = document.getElementById('search-close-btn');
 const searchResults = document.getElementById('search-results');
+const imageLightbox = document.getElementById('image-lightbox');
+const lightboxImg = document.getElementById('lightbox-img');
+const lightboxCloseBtn = document.getElementById('lightbox-close-btn');
 
 const IMAGE_MAX_LENGTH = 700_000; // 서버와 동일한 상한 (대략 500KB 원본에 해당)
 
@@ -492,6 +495,12 @@ document.addEventListener('click', (e) => {
 });
 
 messagesEl.addEventListener('click', (e) => {
+  const clickedImg = e.target.closest('.msg-body .sticker-img');
+  if (clickedImg) {
+    openLightbox(clickedImg.src);
+    return;
+  }
+
   const reactBtn = e.target.closest('.react-btn');
   if (reactBtn) {
     const msgEl = reactBtn.closest('.msg');
@@ -959,4 +968,27 @@ searchForm.addEventListener('submit', (e) => {
         searchResults.appendChild(item);
       });
   });
+});
+
+// --- 사진/스티커 확대 보기(라이트박스) ---
+function openLightbox(src) {
+  lightboxImg.src = src;
+  imageLightbox.classList.remove('hidden');
+}
+
+function closeLightbox() {
+  imageLightbox.classList.add('hidden');
+  lightboxImg.src = '';
+}
+
+imageLightbox.addEventListener('click', closeLightbox);
+lightboxCloseBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeLightbox();
+});
+// 이미지 자체를 클릭했을 때는(배경 클릭과 달리) 안 닫히게 — 실수로 닫히는 것 방지
+lightboxImg.addEventListener('click', (e) => e.stopPropagation());
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !imageLightbox.classList.contains('hidden')) closeLightbox();
 });

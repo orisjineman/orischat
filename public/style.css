@@ -440,12 +440,52 @@ body {
   max-height: 160px;
   border-radius: 12px;
   object-fit: contain;
+  cursor: zoom-in;
 }
 
 .chat-image {
   max-width: 240px;
   max-height: 320px;
   object-fit: cover;
+}
+
+/* 사진/스티커 클릭 시 확대해서 보는 라이트박스 */
+#image-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: zoom-out;
+}
+
+#lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+#lightbox-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#lightbox-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .reply-quote {
