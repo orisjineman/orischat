@@ -279,6 +279,18 @@ body {
   margin: 0 0 12px;
 }
 
+:root[data-theme="intellij"] #sidebar {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+:root[data-theme="intellij"] #sidebar h2::before {
+  content: '📁 ';
+}
+
+:root[data-theme="excel"] #sidebar h2::before {
+  content: '📗 ';
+}
+
 #user-list {
   list-style: none;
   margin: 0;
@@ -322,6 +334,146 @@ body {
   font-weight: 700;
   color: var(--accent);
   background: var(--panel);
+}
+
+/* 엑셀/인텔리제이 테마 전용 장식 UI — 평소엔 숨겨두고 해당 테마일 때만 보임 */
+.theme-chrome {
+  display: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+:root[data-theme="excel"] #room-label::after {
+  content: ' - Excel';
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+:root[data-theme="intellij"] #room-label::after {
+  content: ' – ChatRoom [main]';
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+:root[data-theme="excel"] #excel-ribbon {
+  display: block;
+}
+
+#excel-ribbon {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-family: Calibri, Arial, sans-serif;
+}
+
+.excel-ribbon-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 14px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.excel-ribbon-tabs span {
+  padding: 5px 10px;
+  border-radius: 3px 3px 0 0;
+}
+
+.excel-ribbon-tabs span.active {
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 700;
+  border: 1px solid var(--border);
+  border-bottom-color: var(--bg);
+}
+
+.excel-formula-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.excel-cell-ref {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 2px 10px;
+  border-radius: 2px;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: center;
+  color: var(--text);
+}
+
+.excel-fx {
+  font-style: italic;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.excel-formula-text {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme="intellij"] #intellij-chrome {
+  display: block;
+}
+
+:root[data-theme="intellij"] #intellij-statusbar {
+  display: flex;
+}
+
+#intellij-chrome {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.intellij-menubar {
+  padding: 5px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.intellij-tabs {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+
+.intellij-tabs span {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.intellij-tabs span.active {
+  background: var(--bg);
+  color: var(--text);
+  border-top: 2px solid var(--accent);
+}
+
+#intellij-statusbar {
+  align-items: center;
+  gap: 16px;
+  padding: 3px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', Consolas, monospace;
 }
 
 #notify-btn {
@@ -431,6 +583,53 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* 엑셀 테마: 메시지 목록을 셀 그리드처럼, 말풍선은 각진 셀 모양으로 */
+:root[data-theme="excel"] #messages {
+  background-color: var(--panel);
+  background-image:
+    repeating-linear-gradient(to right, transparent 0 89px, var(--border) 89px 90px),
+    repeating-linear-gradient(to bottom, transparent 0 25px, var(--border) 25px 26px);
+}
+
+:root[data-theme="excel"] .msg:not(.system) {
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  font-family: Calibri, Arial, sans-serif;
+}
+
+:root[data-theme="excel"] .msg.other {
+  background: #ffffff;
+}
+
+/* 인텔리제이 테마: 메시지를 콘솔 출력/코드처럼 (닉네임=키워드색, 본문="문자열", 시간=주석) */
+:root[data-theme="intellij"] #messages {
+  background: var(--bg);
+}
+
+:root[data-theme="intellij"] .msg:not(.system) {
+  font-family: 'JetBrains Mono', Consolas, Menlo, monospace;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+:root[data-theme="intellij"] .msg .msg-nick {
+  color: var(--accent);
+}
+
+:root[data-theme="intellij"] .msg:not(.sticker):not(.deleted) .msg-body::before,
+:root[data-theme="intellij"] .msg:not(.sticker):not(.deleted) .msg-body::after {
+  content: '"';
+}
+
+:root[data-theme="intellij"] .msg.other:not(.sticker):not(.deleted) .msg-body {
+  color: #6a8759;
+}
+
+:root[data-theme="intellij"] .msg .msg-time::before {
+  content: '// ';
+  opacity: 0.7;
 }
 
 /* 대화를 위로 스크롤해서 읽던 중이어도, 새 메시지가 와서 화면이 맨 아래로
@@ -937,14 +1136,40 @@ body {
   object-fit: contain;
 }
 
+#message-input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+}
+
 #message-input {
   flex: 1;
+  width: 100%;
+  box-sizing: border-box;
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg);
   color: var(--text);
   font-size: 14px;
+}
+
+/* 엑셀 테마: 입력창을 선택된 셀처럼(초록 테두리 + 우하단 채우기 핸들) */
+:root[data-theme="excel"] #message-input {
+  border: 2px solid var(--accent);
+  border-radius: 0;
+  font-family: Calibri, Arial, sans-serif;
+}
+
+:root[data-theme="excel"] #message-input-wrap::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border: 1px solid var(--panel);
 }
 
 #message-form button {
@@ -992,6 +1217,16 @@ body {
 
   #search-panel {
     padding: 12px;
+  }
+
+  .excel-ribbon-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .excel-formula-text {
+    max-width: 40vw;
   }
 
   #search-form {

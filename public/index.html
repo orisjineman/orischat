@@ -45,6 +45,23 @@
           <button type="button" id="theme-toggle-btn" aria-label="테마 선택">🌓</button>
         </div>
       </header>
+      <!-- 엑셀/인텔리제이 테마일 때만 보이는 장식용 UI (실제 기능 없음, 순수 눈속임용) -->
+      <div id="excel-ribbon" class="theme-chrome" aria-hidden="true">
+        <div class="excel-ribbon-tabs">
+          <span class="active">홈</span><span>삽입</span><span>페이지 레이아웃</span><span>수식</span><span>데이터</span><span>검토</span><span>보기</span>
+        </div>
+        <div class="excel-formula-bar">
+          <span class="excel-cell-ref">A1</span>
+          <span class="excel-fx">fx</span>
+          <span class="excel-formula-text">=CONCAT(닉네임, ": ", 메시지)</span>
+        </div>
+      </div>
+      <div id="intellij-chrome" class="theme-chrome" aria-hidden="true">
+        <div class="intellij-menubar">File&nbsp;&nbsp;Edit&nbsp;&nbsp;View&nbsp;&nbsp;Navigate&nbsp;&nbsp;Code&nbsp;&nbsp;Refactor&nbsp;&nbsp;Build&nbsp;&nbsp;Run&nbsp;&nbsp;Tools&nbsp;&nbsp;VCS&nbsp;&nbsp;Window&nbsp;&nbsp;Help</div>
+        <div class="intellij-tabs">
+          <span class="active">ChatRoom.kt</span><span>MessageHandler.kt</span>
+        </div>
+      </div>
       <div id="search-panel" class="hidden">
         <form id="search-form">
           <input id="search-input" type="text" placeholder="메시지 검색" autocomplete="off" />
@@ -65,9 +82,14 @@
         <button type="button" id="emoji-btn" aria-label="이모티콘">😊</button>
         <button type="button" id="attach-btn" aria-label="사진 첨부">📎</button>
         <input id="file-input" type="file" accept="image/*" class="hidden" />
-        <input id="message-input" type="text" placeholder="메시지를 입력하세요" autocomplete="off" maxlength="500" />
+        <div id="message-input-wrap">
+          <input id="message-input" type="text" placeholder="메시지를 입력하세요" autocomplete="off" maxlength="500" />
+        </div>
         <button type="submit">보내기</button>
       </form>
+      <div id="intellij-statusbar" class="theme-chrome" aria-hidden="true">
+        <span>🌿 main</span><span>UTF-8</span><span>4 spaces</span><span>Ln 1, Col 1</span>
+      </div>
     </main>
   </div>
 
