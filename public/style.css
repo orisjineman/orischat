@@ -46,6 +46,31 @@
   --bubble-other: #eef0f3;
 }
 
+/* IntelliJ IDEA(Darcula)에서 따온 테마 — 클래스/키워드 색으로 유명한
+   오렌지(#cc7832)를 포인트 색으로 씀 */
+:root[data-theme="intellij"] {
+  --bg: #2b2b2b;
+  --panel: #3c3f41;
+  --border: #515151;
+  --text: #a9b7c6;
+  --muted: #808080;
+  --accent: #cc7832;
+  --accent-text: #2b2b2b;
+  --bubble-other: #323232;
+}
+
+/* 엑셀 느낌의 테마 — 엑셀 아이콘/포인트 색인 초록(#217346)을 그대로 사용 */
+:root[data-theme="excel"] {
+  --bg: #f3f3f3;
+  --panel: #ffffff;
+  --border: #d4d4d4;
+  --text: #1a1a1a;
+  --muted: #6f6f6f;
+  --accent: #217346;
+  --accent-text: #ffffff;
+  --bubble-other: #e6f4ea;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -110,6 +135,32 @@ body {
 
 #avatar-btn:hover {
   background: var(--bubble-other);
+}
+
+#avatar-btn-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 프로필 사진 변경용 작은 연필 배지 — 버튼 클릭 자체는 확대 보기라서,
+   사진 변경은 이 배지로 따로 뺌 */
+#avatar-edit-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--panel);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 8px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* 헤더 버튼 안에 들어가는 내 프로필 사진/이니셜 — 기본 .msg-avatar는
@@ -443,6 +494,10 @@ body {
   background: var(--bubble-other);
 }
 
+.avatar-clickable {
+  cursor: zoom-in;
+}
+
 .msg-body a {
   color: inherit;
   text-decoration: underline;
@@ -694,6 +749,41 @@ body {
 
 .reaction-pick:hover {
   background: var(--bubble-other);
+}
+
+#theme-picker {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+  min-width: 130px;
+}
+
+.theme-option {
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.theme-option:hover {
+  background: var(--bubble-other);
+}
+
+.theme-option.active {
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+  font-weight: 700;
 }
 
 #load-more-btn {

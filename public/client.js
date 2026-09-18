@@ -30,6 +30,7 @@ const searchInput = document.getElementById('search-input');
 const searchCloseBtn = document.getElementById('search-close-btn');
 const searchResults = document.getElementById('search-results');
 const avatarBtn = document.getElementById('avatar-btn');
+const avatarEditBtn = document.getElementById('avatar-edit-btn');
 const avatarFileInput = document.getElementById('avatar-file-input');
 const scrollBottomBtn = document.getElementById('scroll-bottom-btn');
 const imageLightbox = document.getElementById('image-lightbox');
@@ -190,29 +191,60 @@ function markDeletedInHistory(messageId) {
   }
 }
 
-// --- 라이트 / 다크 테마 수동 토글 (시스템 설정보다 우선 적용됨) ---
+// --- 테마 선택 (시스템 설정보다 수동 선택이 우선 적용됨) ---
 const THEME_KEY = 'orischat-theme';
+const THEME_OPTIONS = [
+  { value: '', icon: '🌓', label: '시스템 설정' },
+  { value: 'light', icon: '☀️', label: '라이트' },
+  { value: 'dark', icon: '🌙', label: '다크' },
+  { value: 'intellij', icon: '🧠', label: 'IntelliJ' },
+  { value: 'excel', icon: '📊', label: 'Excel' },
+];
+
 function applyTheme(theme) {
-  if (theme === 'light' || theme === 'dark') {
-    document.documentElement.setAttribute('data-theme', theme);
-    themeToggleBtn.textContent = theme === 'dark' ? '🌙' : '☀️';
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-    themeToggleBtn.textContent = '🌓';
-  }
+  const opt = THEME_OPTIONS.find((o) => o.value === (theme || '')) || THEME_OPTIONS[0];
+  if (opt.value) document.documentElement.setAttribute('data-theme', opt.value);
+  else document.documentElement.removeAttribute('data-theme');
+  themeToggleBtn.textContent = opt.icon;
+  themePicker.querySelectorAll('.theme-option').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.themeValue === opt.value);
+  });
 }
+
+const themePicker = document.createElement('div');
+themePicker.id = 'theme-picker';
+themePicker.className = 'hidden';
+themePicker.innerHTML = THEME_OPTIONS.map(
+  (o) => `<button type="button" class="theme-option" data-theme-value="${o.value}">${o.icon} ${o.label}</button>`
+).join('');
+document.body.appendChild(themePicker);
 applyTheme(localStorage.getItem(THEME_KEY));
 
-themeToggleBtn.addEventListener('click', () => {
-  const current = document.documentElement.getAttribute('data-theme');
-  const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-  // 시스템 기본값 → 반대쪽으로 한 번, 다시 누르면 원래대로(시스템 설정 따름)로 순환
-  let next;
-  if (!current) next = systemDark ? 'light' : 'dark';
-  else next = null;
-  if (next) localStorage.setItem(THEME_KEY, next);
+themeToggleBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const opening = themePicker.classList.contains('hidden');
+  if (opening) {
+    const rect = themeToggleBtn.getBoundingClientRect();
+    themePicker.style.top = `${rect.bottom + window.scrollY + 6}px`;
+    themePicker.style.right = `${window.innerWidth - rect.right}px`;
+  }
+  themePicker.classList.toggle('hidden');
+});
+
+themePicker.addEventListener('click', (e) => {
+  const btn = e.target.closest('.theme-option');
+  if (!btn) return;
+  const value = btn.dataset.themeValue;
+  if (value) localStorage.setItem(THEME_KEY, value);
   else localStorage.removeItem(THEME_KEY);
-  applyTheme(next);
+  applyTheme(value);
+  themePicker.classList.add('hidden');
+});
+
+document.addEventListener('click', (e) => {
+  if (!themePicker.classList.contains('hidden') && e.target !== themeToggleBtn && !themePicker.contains(e.target)) {
+    themePicker.classList.add('hidden');
+  }
 });
 
 // --- 백그라운드 푸시 알림 (탭/브라우저를 닫아도 알림 받기) ---
@@ -640,12 +672,20 @@ function applyDeletedState(msgEl) {
 // 프로필 사진(닉네임 기준)이 있으면 그걸, 없으면(또는 로드 실패하면) 이니셜
 // 배지를 보여주는 엘리먼트를 만듦. avatar-updated 이벤트가 오면 이 함수로
 // 다시 만들어서 교체함.
-function createAvatarEl(nickname) {
+function createAvatarEl(nickname, { clickable = true } = {}) {
   const img = document.createElement('img');
   img.className = 'msg-avatar msg-avatar-img';
   img.alt = '';
   img.dataset.avatarNickname = nickname;
   img.src = `/avatar/${encodeURIComponent(nickname)}?v=${avatarVersions.get(nickname) || 0}`;
+  if (clickable) {
+    img.classList.add('avatar-clickable');
+    // 사진이 없어서 onerror로 이니셜 배지로 바뀌기 전까지만 클릭이 유효함
+    img.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openLightbox(img.src);
+    });
+  }
   img.onerror = () => {
     const span = document.createElement('span');
     span.className = 'msg-avatar';
@@ -1109,12 +1149,25 @@ function resizeImageSquare(file, size, quality) {
 function refreshMyAvatarButton() {
   if (!myNickname) return;
   avatarBtn.innerHTML = '';
-  const el = createAvatarEl(myNickname);
+  // 버튼 자체는 "크게 보기" 클릭을 담당하므로, 내부 이미지는 클릭 핸들러가
+  // 따로 없는 버전으로 만듦 (이벤트 버블링이 막히면 버튼 클릭이 씹힘)
+  const el = createAvatarEl(myNickname, { clickable: false });
   el.classList.add('avatar-btn-img');
   avatarBtn.appendChild(el);
 }
 
-avatarBtn.addEventListener('click', () => avatarFileInput.click());
+avatarBtn.addEventListener('click', () => {
+  if (!myNickname) return;
+  // 사진을 설정 안 했으면(이니셜 배지만 있으면) 확대해서 볼 게 없으니 바로
+  // 사진 설정 화면으로 보냄
+  if (!avatarBtn.querySelector('img')) {
+    avatarFileInput.click();
+    return;
+  }
+  openLightbox(`/avatar/${encodeURIComponent(myNickname)}?v=${avatarVersions.get(myNickname) || 0}`);
+});
+
+avatarEditBtn.addEventListener('click', () => avatarFileInput.click());
 
 avatarFileInput.addEventListener('change', async () => {
   const file = avatarFileInput.files[0];

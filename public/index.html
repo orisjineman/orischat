@@ -35,11 +35,14 @@
       <header id="chat-header">
         <span id="room-label">OrisChat</span>
         <div id="header-actions">
-          <button type="button" id="avatar-btn" aria-label="프로필 사진 설정">🖼</button>
+          <div id="avatar-btn-wrap">
+            <button type="button" id="avatar-btn" aria-label="프로필 사진 크게 보기">🖼</button>
+            <button type="button" id="avatar-edit-btn" aria-label="프로필 사진 변경">✏️</button>
+          </div>
           <input id="avatar-file-input" type="file" accept="image/*" class="hidden" />
           <button type="button" id="search-btn" aria-label="검색">🔍</button>
           <button type="button" id="notify-btn" aria-label="알림 켜기">🔕 알림 켜기</button>
-          <button type="button" id="theme-toggle-btn" aria-label="라이트/다크 테마 전환">🌓</button>
+          <button type="button" id="theme-toggle-btn" aria-label="테마 선택">🌓</button>
         </div>
       </header>
       <div id="search-panel" class="hidden">
