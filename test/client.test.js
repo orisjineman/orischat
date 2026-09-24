@@ -91,6 +91,7 @@ async function boot({ session = {}, local = {}, url = 'http://localhost/', confi
   set('sessionStorage', window.sessionStorage);
   set('location', window.location);
   set('history', window.history);
+  set('navigator', window.navigator); // Node 20에는 전역 navigator가 없음 (21+부터 제공)
   set('CSS', { escape: (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, (c) => `\\${c}`) });
   set('io', () => socket);
   set('fetch', fetchStub);
