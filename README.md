@@ -97,7 +97,14 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 
 ```
 .
-├── server.js          # Express + Socket.IO 서버
+├── server.js          # Express + Socket.IO 서버 조립/시작 (라우트·핸들러 연결만 함)
+├── lib/               # 서버 내부 모듈
+│   ├── config.js        #   상수/환경 변수
+│   ├── state.js         #   접속자, 메시지 작성자 캐시, 읽음 위치 (메모리)
+│   ├── store.js         #   리액션/프로필 사진 저장소 (DB 또는 메모리 폴백)
+│   ├── routes.js        #   HTTP API (/api/config, /api/rooms, /avatar)
+│   ├── stickers.js      #   스티커 목록/이미지 서빙
+│   └── handlers/        #   소켓 이벤트별 핸들러 (session, chat, reactions, ...)
 ├── db.js              # Turso(libSQL) 메시지/리액션/푸시 구독 저장소
 ├── push.js            # 웹 푸시(Web Push) 알림 발송
 ├── test/              # 서버 통합 테스트 + 클라이언트(jsdom) 테스트 (node --test)
