@@ -370,8 +370,9 @@ test('서버 재시작처럼 권한 캐시가 비어 있어도, history를 받�
   const sock = connectClient();
   try {
     // history를 받기 전에는 서버가 이 메시지의 주인을 모르므로 삭제가 무시됨
+    const historyPromise = waitFor(sock, 'history'); // join보다 먼저 걸어야 놓치지 않음
     await join(sock, { nickname: 'perm-me', room, clientId: 'perm-me-id' });
-    const history = await waitFor(sock, 'history');
+    const history = await historyPromise;
     assert.deepEqual(history.map((m) => m.mine), [true, false]);
 
     // 남의 옛 메시지는 못 지움
