@@ -28,7 +28,7 @@
 - 브라우저 알림 — [Web Push](https://web.dev/push-notifications-overview/) 설정 시 브라우저/탭을 완전히 닫아도 알림 수신, 미설정 시에도 탭이 안 보일 때는 알림(포그라운드 한정)
 - 도배 방지 (짧은 시간에 메시지/리액션을 너무 많이 보내면 잠시 제한)
 - 입장 비밀번호 (선택, `CHAT_PIN` 환경 변수로 설정)
-- 메시지/리액션/푸시 구독 영구 저장 ([Turso](https://turso.tech) 연동 시, 서버 재시작해도 대화 유지 / 7일 지난 메시지는 자동 삭제)
+- 메시지/리액션/프로필 사진/푸시 구독 영구 저장 ([Turso](https://turso.tech) 연동 시, 서버 재시작해도 대화 유지 / 7일 지난 메시지는 자동 삭제)
 - 새로고침해도 대화 유지 (탭을 닫으면 초기화)
 - 라이트 / 다크 모드 자동 대응 + 수동 선택 (IntelliJ, Excel 테마도 있음)
 - PWA (홈 화면에 추가해서 앱처럼 사용 가능)
@@ -36,10 +36,12 @@
 
 ## 기술 스택
 
-- [Express](https://expressjs.com/) — 정적 파일 서빙
+- [Express](https://expressjs.com/) — 정적 파일/HTTP API 서빙
 - [Socket.IO](https://socket.io/) — 실시간 양방향 통신
+- [libSQL 클라이언트](https://github.com/tursodatabase/libsql-client-ts) ([Turso](https://turso.tech)) — 선택적 영구 저장 (없으면 메모리 폴백)
 - [web-push](https://github.com/web-push-libs/web-push) — 백그라운드 푸시 알림
-- Vanilla JS / HTML / CSS (프론트엔드 프레임워크 없음)
+- [sharp](https://sharp.pixelplumbing.com/) — 큰 스티커 이미지 자동 축소
+- Vanilla JS / HTML / CSS — 프론트엔드 프레임워크/번들러 없이 브라우저 네이티브 ES 모듈(`<script type="module">`)로 구성
 
 ## 시작하기
 
@@ -97,28 +99,37 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 
 ```
 .
-├── server.js          # Express + Socket.IO 서버 조립/시작 (라우트·핸들러 연결만 함)
-├── lib/               # 서버 내부 모듈
-│   ├── config.js        #   상수/환경 변수
-│   ├── state.js         #   접속자, 메시지 작성자 캐시, 읽음 위치 (메모리)
-│   ├── store.js         #   리액션/프로필 사진 저장소 (DB 또는 메모리 폴백)
-│   ├── routes.js        #   HTTP API (/api/config, /api/rooms, /avatar)
-│   ├── stickers.js      #   스티커 목록/이미지 서빙
-│   ├── pushSubscriptions.js #  푸시 구독 저장소 (DB 또는 메모리 폴백)
-│   ├── db/              #   테이블별 DB 모듈 (schema, messages, reactions, subscriptions, avatars)
-│   └── handlers/        #   소켓 이벤트별 핸들러 (session, chat, reactions, ...)
-├── db.js              # Turso(libSQL) 저장소 진입점 (lib/db/ 모듈을 모아서 내보냄)
-├── push.js            # 웹 푸시(Web Push) 알림 발송
-├── test/              # 서버 통합 테스트 + 클라이언트(jsdom) 테스트 (node --test)
+├── server.js              # Express + Socket.IO 서버 조립/시작 (라우트·핸들러 연결만 함)
+├── db.js                  # 저장소(Turso/libSQL) 진입점 — lib/db/ 모듈을 모아서 내보냄
+├── push.js                # 웹 푸시(Web Push) 알림 구독/발송
+├── lib/                   # 서버 내부 모듈
+│   ├── config.js            #   상수/환경 변수
+│   ├── state.js             #   접속자, 메시지 작성자 캐시, 읽음 위치 (메모리)
+│   ├── store.js             #   리액션/프로필 사진 저장소 (DB 또는 메모리 폴백)
+│   ├── pushSubscriptions.js #   푸시 구독 저장소 (DB 또는 메모리 폴백)
+│   ├── present.js           #   서버 데이터를 "보는 사람 기준"으로 변환 (clientId 비노출)
+│   ├── emitters.js          #   방 전체/개인별 전송 헬퍼 (접속자 목록, 읽음 갱신 등)
+│   ├── rateLimiter.js       #   도배 방지 (이벤트별 제한)
+│   ├── validation.js        #   입력 검증
+│   ├── routes.js            #   HTTP API (/api/config, /api/rooms, /avatar/:nickname)
+│   ├── stickers.js          #   스티커 목록/이미지 서빙 (큰 이미지는 축소해서 캐시)
+│   ├── db/                  #   테이블별 DB 모듈 (client, schema, messages, reactions,
+│   │                        #   subscriptions, avatars)
+│   └── handlers/            #   소켓 이벤트별 핸들러 (session, chat, reactions,
+│                            #   messageActions, history, avatar, presence, pushSubscription)
 ├── public/
-│   ├── index.html       # 채팅 화면 UI
-│   ├── style.css        # 스타일
-│   ├── client.js        # 클라이언트 진입점 (아래 js/ 모듈을 불러옴)
-│   ├── js/              # 기능별 ES 모듈 (login, messages, compose, avatar, reactions, search, theme ...)
-│   ├── manifest.json     # PWA 매니페스트
-│   ├── service-worker.js # 백그라운드 푸시 수신용 Service Worker
-│   ├── icons/            # PWA 아이콘
-│   └── stickers/         # 커스텀 스티커 이미지 (아래 참고)
+│   ├── index.html           # 채팅 화면 UI
+│   ├── style.css            # 스타일 (라이트/다크/IntelliJ/Excel 테마)
+│   ├── client.js            # 클라이언트 진입점 — js/ 모듈을 불러옴
+│   ├── js/                  # 기능별 ES 모듈 (login, messages, compose, avatar, reactions,
+│   │                        # reply, search, read, theme, notifications, lightbox, ...)
+│   ├── package.json         # {"type":"module"} — 테스트에서 Node가 이 폴더를 ESM으로 읽게 함
+│   ├── manifest.json        # PWA 매니페스트
+│   ├── service-worker.js    # 백그라운드 푸시 수신용 Service Worker
+│   ├── icons/               # PWA 아이콘
+│   └── stickers/            # 커스텀 스티커 이미지 (아래 참고)
+├── test/                  # 서버/클라이언트 테스트 (node --test, 아래 참고)
+│   └── helpers/             #   소켓 하네스, 가짜 web-push, push 공용 시나리오
 └── package.json
 ```
 
@@ -128,7 +139,21 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 npm test
 ```
 
-Node 내장 테스트 러너(`node --test`)로 입장/메시지/리액션/삭제/방 분리/도배 방지 동작을 실제 소켓 연결로 검증합니다. GitHub Actions에서 push/PR마다 자동으로 돌아갑니다 (`.github/workflows/test.yml`).
+Node 내장 테스트 러너(`node --test`)로 실행하며, 별도 서버나 DB 없이 돌아갑니다. 테스트 파일마다 별도 프로세스라서, 환경 변수(DB/VAPID/PIN)가 다른 모드를 파일 단위로 나눠 검증합니다.
+
+| 파일 | 검증 대상 |
+| --- | --- |
+| `chat.test.js`, `chat-events.test.js` | 소켓 이벤트 전반 — 입장 정리, 메시지 검증(길이/스티커/사진/답장/멘션), 리액션, 삭제·수정 권한, 입력 중, 읽음 표시, 도배 방지 (메모리 모드) |
+| `http.test.js` | HTTP API, 스티커 서빙(경로 조작 차단), 프로필 사진 |
+| `chat-db.test.js` | DB 모드 통합 — 대화 기록 복원, 페이지네이션, 검색, 수정, 삭제, 7일 정리 (로컬 libSQL 파일 사용) |
+| `chat-pin.test.js` | `CHAT_PIN` 설정 서버 |
+| `db.test.js`, `db-disabled.test.js` | `db.js` 단위 테스트(옛 스키마 마이그레이션 포함), DB 미설정 시 계약 |
+| `push*.test.js` | 푸시 구독/발송 — 메모리·DB 두 저장 경로에 같은 시나리오, VAPID 미설정/반쪽 설정 (`web-push`는 가짜로 대체) |
+| `client.test.js` | 브라우저 클라이언트 — 실제 `index.html`을 [jsdom](https://github.com/jsdom/jsdom)에 올리고 가짜 소켓으로 서버 이벤트를 흉내내 DOM/전송 이벤트 검증 |
+
+- 특정 파일만 실행: `node --test test/db.test.js`
+- 클라이언트 테스트는 jsdom 때문에 **Node 20.19 이상**이 필요합니다.
+- GitHub Actions에서 push/PR마다 자동으로 돌아갑니다 (`.github/workflows/test.yml`, Node 20).
 
 ## 커스텀 스티커 추가하기
 
@@ -142,7 +167,7 @@ Render 무료 플랜은 15분간 요청이 없으면 서버가 잠들고, 다음
 
 ## 참고 / 한계
 
-- `TURSO_DATABASE_URL`을 설정하지 않으면 메시지/리액션/푸시 구독이 메모리에만 저장되어 서버가 재시작되면 사라집니다. "이전 메시지 더 보기", 메시지 수정, 검색은 DB가 있어야 동작합니다.
+- `TURSO_DATABASE_URL`을 설정하지 않으면 메시지/리액션/프로필 사진/푸시 구독이 메모리에만 저장되어 서버가 재시작되면 사라집니다. "이전 메시지 더 보기", 메시지 수정, 검색은 DB가 있어야 동작합니다.
 - `CHAT_PIN`을 설정하지 않으면 접속 주소를 아는 사람은 누구나 들어올 수 있습니다.
 - 사진 첨부는 용량 상한(base64 기준 약 700KB, 원본 500KB 정도)이 있고, 넘으면 거부됩니다. 서버 파일시스템이 아니라 DB에 저장되므로 무료 DB 용량을 고려한 제한입니다 — 7일 지나면 메시지와 함께 자동 삭제됩니다.
 - 방 목록은 "현재 접속자가 있는 방"과 "DB에 메시지 기록이 있는 방"만 보여줍니다. 방 이름을 URL 파라미터로 공유하는 방식은 그대로 유효합니다.
