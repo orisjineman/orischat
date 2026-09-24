@@ -6,15 +6,30 @@ const { test, after } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { pathToFileURL } = require('url');
 const { JSDOM } = require('jsdom');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const HTML = fs.readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
-const CLIENT_URL = pathToFileURL(path.join(PUBLIC_DIR, 'client.js')).href;
 
 const windows = [];
+const tmpDirs = [];
 let bootCount = 0;
+
+// ES 모듈은 URL 단위로 캐시되어 한 번만 평가되는데, 테스트마다 새 DOM/소켓에 다시
+// 연결해야 함. 클라이언트가 여러 모듈로 나뉘어 있어서 진입점에만 쿼리를 붙이면
+// 하위 모듈은 캐시가 재사용되므로, 부팅마다 소스를 새 임시 폴더로 복사해서 import함.
+function copyClientSources() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orischat-client-'));
+  tmpDirs.push(dir);
+  fs.writeFileSync(path.join(dir, 'package.json'), '{ "type": "module" }');
+  for (const name of fs.readdirSync(PUBLIC_DIR)) {
+    if (name === 'client.js') fs.copyFileSync(path.join(PUBLIC_DIR, name), path.join(dir, name));
+    else if (name === 'js') fs.cpSync(path.join(PUBLIC_DIR, name), path.join(dir, name), { recursive: true });
+  }
+  return pathToFileURL(path.join(dir, 'client.js')).href;
+}
 
 class FakeSocket {
   constructor() {
@@ -87,7 +102,8 @@ async function boot({ session = {}, local = {}, url = 'http://localhost/', confi
   });
   set('Notification', undefined);
 
-  await import(`${CLIENT_URL}?boot=${++bootCount}`);
+  await import(copyClientSources());
+  bootCount++;
   await tick();
 
   const $ = (sel) => document.querySelector(sel);
@@ -123,6 +139,7 @@ async function bootJoined(opts = {}) {
 
 after(() => {
   for (const w of windows) w.close();
+  for (const dir of tmpDirs) fs.rmSync(dir, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------- 입장

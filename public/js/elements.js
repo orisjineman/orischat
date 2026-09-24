@@ -1,0 +1,40 @@
+// index.html의 고정 DOM 요소 모음. 동적으로 만드는 요소(테마 피커, 리액션 팝업 등)는
+// 각자 모듈에서 만듦.
+const byId = (id) => document.getElementById(id);
+
+export const loginScreen = byId('login-screen');
+export const chatScreen = byId('chat-screen');
+export const nicknameInput = byId('nickname-input');
+export const roomInput = byId('room-input');
+export const pinInput = byId('pin-input');
+export const joinError = byId('join-error');
+export const joinBtn = byId('join-btn');
+export const userList = byId('user-list');
+export const messagesEl = byId('messages');
+export const typingIndicator = byId('typing-indicator');
+export const messageForm = byId('message-form');
+export const messageInput = byId('message-input');
+export const emojiBtn = byId('emoji-btn');
+export const emojiPicker = byId('emoji-picker');
+export const notifyBtn = byId('notify-btn');
+export const themeToggleBtn = byId('theme-toggle-btn');
+export const roomLabel = byId('room-label');
+export const roomListEl = byId('room-list');
+export const attachBtn = byId('attach-btn');
+export const fileInput = byId('file-input');
+export const replyBanner = byId('reply-banner');
+export const replyBannerText = byId('reply-banner-text');
+export const replyCancelBtn = byId('reply-cancel-btn');
+export const searchBtn = byId('search-btn');
+export const searchPanel = byId('search-panel');
+export const searchForm = byId('search-form');
+export const searchInput = byId('search-input');
+export const searchCloseBtn = byId('search-close-btn');
+export const searchResults = byId('search-results');
+export const avatarBtn = byId('avatar-btn');
+export const avatarEditBtn = byId('avatar-edit-btn');
+export const avatarFileInput = byId('avatar-file-input');
+export const scrollBottomBtn = byId('scroll-bottom-btn');
+export const imageLightbox = byId('image-lightbox');
+export const lightboxImg = byId('lightbox-img');
+export const lightboxCloseBtn = byId('lightbox-close-btn');

@@ -100,11 +100,12 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 ├── server.js          # Express + Socket.IO 서버
 ├── db.js              # Turso(libSQL) 메시지/리액션/푸시 구독 저장소
 ├── push.js            # 웹 푸시(Web Push) 알림 발송
-├── test/              # 서버 동작 통합 테스트 (node --test)
+├── test/              # 서버 통합 테스트 + 클라이언트(jsdom) 테스트 (node --test)
 ├── public/
 │   ├── index.html       # 채팅 화면 UI
 │   ├── style.css        # 스타일
-│   ├── client.js        # 클라이언트 로직 (입장, 메시지 송수신 등)
+│   ├── client.js        # 클라이언트 진입점 (아래 js/ 모듈을 불러옴)
+│   ├── js/              # 기능별 ES 모듈 (login, messages, compose, avatar, reactions, search, theme ...)
 │   ├── manifest.json     # PWA 매니페스트
 │   ├── service-worker.js # 백그라운드 푸시 수신용 Service Worker
 │   ├── icons/            # PWA 아이콘
