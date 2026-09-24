@@ -648,9 +648,10 @@ function start(port = PORT) {
       // 값/에러가 그대로 전달됨) 포트 번호를 돌려주려면 .then()을 써야 함.
       if (db.enabled) {
         db.cleanupOldMessages().catch((err) => console.error('오래된 메시지 정리 오류:', err));
+        // unref: 이 타이머 때문에 프로세스(테스트 등)가 종료되지 못하는 일이 없도록 함
         setInterval(() => {
           db.cleanupOldMessages().catch((err) => console.error('오래된 메시지 정리 오류:', err));
-        }, CLEANUP_INTERVAL_MS);
+        }, CLEANUP_INTERVAL_MS).unref();
       }
 
       return new Promise((resolve) => {
