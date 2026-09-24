@@ -25,6 +25,10 @@ const IMAGE_MAX_LENGTH = 700_000;
 // 프로필 사진은 훨씬 작게(정사각형 썸네일) 보내므로 상한도 더 낮게 둠
 const AVATAR_MAX_LENGTH = 250_000;
 
+function isValidImageDataUrl(value, maxLength) {
+  return value.startsWith('data:image/') && value.length <= maxLength;
+}
+
 function cleanRoomName(name) {
   const trimmed = String(name || '').trim().slice(0, 30);
   return trimmed || DEFAULT_ROOM;
@@ -121,6 +125,12 @@ function toClientMessage(row, viewerClientId) {
   return { ...rest, mine: clientId === viewerClientId, reactions: reactionsForViewer(r, viewerClientId) };
 }
 
+// DB에서 읽은 메시지 목록을 삭제 권한 캐시에 기록하고 viewer용으로 변환
+function toClientMessages(rows, room, viewerClientId) {
+  for (const m of rows) rememberMessage(m.id, m.clientId, room);
+  return rows.map((m) => toClientMessage(m, viewerClientId));
+}
+
 // --- 짧은 시간에 너무 많은 요청을 보내는 걸 막는 간단한 sliding-window rate limiter ---
 function createLimiter(maxHits, windowMs) {
   const hits = new Map(); // socket.id -> timestamp[]
@@ -138,14 +148,20 @@ function createLimiter(maxHits, windowMs) {
   };
 }
 
-const messageLimiter = createLimiter(8, 5000); // 5초에 8개까지
-const reactionLimiter = createLimiter(20, 5000);
-const loadMoreLimiter = createLimiter(10, 10000);
-const deleteLimiter = createLimiter(10, 10000);
-const editLimiter = createLimiter(10, 10000);
-const searchLimiter = createLimiter(10, 10000);
-const avatarLimiter = createLimiter(5, 60000);
-const readLimiter = createLimiter(30, 5000);
+// 이벤트별 제한: [최대 횟수, 윈도우(ms)]
+const LIMITS = {
+  message: [8, 5000], // 5초에 8개까지
+  reaction: [20, 5000],
+  loadMore: [10, 10000],
+  delete: [10, 10000],
+  edit: [10, 10000],
+  search: [10, 10000],
+  avatar: [5, 60000],
+  read: [30, 5000],
+};
+const limiters = Object.fromEntries(
+  Object.entries(LIMITS).map(([name, [max, windowMs]]) => [name, createLimiter(max, windowMs)])
+);
 
 app.get('/api/config', (req, res) => {
   res.json({ pinRequired: Boolean(CHAT_PIN), pushPublicKey: push.enabled ? push.publicKey : null });
@@ -317,16 +333,13 @@ io.on('connection', (socket) => {
 
     if (db.enabled) {
       db.getRecentMessages(roomName, HISTORY_PAGE_SIZE)
-        .then((history) => {
-          for (const m of history) rememberMessage(m.id, m.clientId, roomName);
-          socket.emit('history', history.map((m) => toClientMessage(m, id)));
-        })
+        .then((history) => socket.emit('history', toClientMessages(history, roomName, id)))
         .catch((err) => console.error('히스토리 조회 오류:', err));
     }
   });
 
   socket.on('chat-message', async (payload) => {
-    if (!messageLimiter.check(socket.id)) {
+    if (!limiters.message.check(socket.id)) {
       socket.emit('rate-limited', { action: 'chat-message' });
       return;
     }
@@ -354,7 +367,7 @@ io.on('connection', (socket) => {
       // 클라이언트가 이미 리사이즈/압축해서 보내지만, 용량 상한은 서버에서도 강제함
       // (무료 DB 용량을 지키기 위함 — 7일 지나면 자동 삭제되긴 하지만 그 전까지 쌓일 수 있음)
       const dataUrl = String(data.content || '');
-      if (!dataUrl.startsWith('data:image/') || dataUrl.length > IMAGE_MAX_LENGTH) {
+      if (!isValidImageDataUrl(dataUrl, IMAGE_MAX_LENGTH)) {
         socket.emit('upload-error', '이미지 용량이 너무 큽니다. 더 작은 사진으로 시도해주세요.');
         return;
       }
@@ -401,7 +414,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('react', async ({ messageId, emoji } = {}) => {
-    if (!reactionLimiter.check(socket.id)) {
+    if (!limiters.reaction.check(socket.id)) {
       socket.emit('rate-limited', { action: 'react' });
       return;
     }
@@ -450,7 +463,7 @@ io.on('connection', (socket) => {
 
   // 본인이 쓴 메시지만 삭제 가능 (clientId가 작성자와 일치할 때만)
   socket.on('delete-message', async ({ messageId } = {}) => {
-    if (!deleteLimiter.check(socket.id)) return;
+    if (!limiters.delete.check(socket.id)) return;
 
     const clientId = socket.data.clientId;
     const room = socket.data.room;
@@ -476,7 +489,7 @@ io.on('connection', (socket) => {
   // 본인이 쓴 텍스트 메시지만 수정 가능. DB 없이는 원본을 서버가 따로 갖고 있지
   // 않아서(한 번 브로드캐스트하고 끝) 수정 기능 자체가 동작하지 않음.
   socket.on('edit-message', async ({ messageId, content } = {}) => {
-    if (!editLimiter.check(socket.id)) return;
+    if (!limiters.edit.check(socket.id)) return;
 
     const clientId = socket.data.clientId;
     const room = socket.data.room;
@@ -500,7 +513,7 @@ io.on('connection', (socket) => {
   // 방 안 메시지 검색 (DB 없으면 검색할 과거 기록이 없으므로 빈 배열만 응답)
   socket.on('search-messages', async ({ query } = {}, callback) => {
     if (typeof callback !== 'function') return;
-    if (!searchLimiter.check(socket.id)) return callback([]);
+    if (!limiters.search.check(socket.id)) return callback([]);
 
     const room = socket.data.room;
     const clientId = socket.data.clientId;
@@ -508,9 +521,7 @@ io.on('connection', (socket) => {
     if (!room || !clientId || !db.enabled || !q) return callback([]);
 
     try {
-      const results = await db.searchMessages(room, q, 50);
-      for (const m of results) rememberMessage(m.id, m.clientId, room);
-      callback(results.map((m) => toClientMessage(m, clientId)));
+      callback(toClientMessages(await db.searchMessages(room, q, 50), room, clientId));
     } catch (err) {
       console.error('검색 오류:', err);
       callback([]);
@@ -520,16 +531,14 @@ io.on('connection', (socket) => {
   // "이전 메시지 더 보기" — DB가 없으면 더 볼 과거 기록이 없으므로 빈 배열만 응답
   socket.on('load-more', async ({ beforeTime } = {}, callback) => {
     if (typeof callback !== 'function') return;
-    if (!loadMoreLimiter.check(socket.id)) return callback([]);
+    if (!limiters.loadMore.check(socket.id)) return callback([]);
 
     const room = socket.data.room;
     const clientId = socket.data.clientId;
     if (!room || !clientId || !db.enabled || !beforeTime) return callback([]);
 
     try {
-      const older = await db.getMessagesBefore(room, beforeTime, HISTORY_PAGE_SIZE);
-      for (const m of older) rememberMessage(m.id, m.clientId, room);
-      callback(older.map((m) => toClientMessage(m, clientId)));
+      callback(toClientMessages(await db.getMessagesBefore(room, beforeTime, HISTORY_PAGE_SIZE), room, clientId));
     } catch (err) {
       console.error('이전 메시지 조회 오류:', err);
       callback([]);
@@ -560,13 +569,13 @@ io.on('connection', (socket) => {
   // 쓰는 동안 계속 보임). 클라이언트가 미리 리사이즈해서 보내지만 서버에서도
   // 크기 상한을 강제함.
   socket.on('set-avatar', async ({ content } = {}) => {
-    if (!avatarLimiter.check(socket.id)) return;
+    if (!limiters.avatar.check(socket.id)) return;
 
     const nickname = socket.data.nickname;
     if (!nickname) return;
 
     const dataUrl = String(content || '');
-    if (!dataUrl.startsWith('data:image/') || dataUrl.length > AVATAR_MAX_LENGTH) {
+    if (!isValidImageDataUrl(dataUrl, AVATAR_MAX_LENGTH)) {
       socket.emit('upload-error', '프로필 사진 용량이 너무 큽니다. 더 작은 사진으로 시도해주세요.');
       return;
     }
@@ -589,7 +598,7 @@ io.on('connection', (socket) => {
   // 메시지 시각 이상으로 읽음 표시를 하면, 그 메시지를 보낸 사람 화면에
   // "읽음"이 뜸.
   socket.on('mark-read', ({ time } = {}) => {
-    if (!readLimiter.check(socket.id)) return;
+    if (!limiters.read.check(socket.id)) return;
 
     const room = socket.data.room;
     const clientId = socket.data.clientId;
@@ -611,14 +620,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    messageLimiter.forget(socket.id);
-    reactionLimiter.forget(socket.id);
-    loadMoreLimiter.forget(socket.id);
-    deleteLimiter.forget(socket.id);
-    editLimiter.forget(socket.id);
-    searchLimiter.forget(socket.id);
-    avatarLimiter.forget(socket.id);
-    readLimiter.forget(socket.id);
+    for (const limiter of Object.values(limiters)) limiter.forget(socket.id);
 
     const user = users.get(socket.id);
     if (user) {

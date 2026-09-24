@@ -38,6 +38,7 @@ const lightboxImg = document.getElementById('lightbox-img');
 const lightboxCloseBtn = document.getElementById('lightbox-close-btn');
 
 const IMAGE_MAX_LENGTH = 700_000; // 서버와 동일한 상한 (대략 500KB 원본에 해당)
+const AVATAR_MAX_LENGTH = 250_000; // 서버와 동일한 프로필 사진 상한
 
 const DEFAULT_ROOM = 'general';
 const HISTORY_PAGE_SIZE = 50;
@@ -146,49 +147,33 @@ function saveToHistory(entry) {
   const history = loadHistory();
   history.push(entry);
   while (history.length > HISTORY_LIMIT) history.shift();
+  saveHistory(history);
+}
+
+function saveHistory(history) {
   try {
     sessionStorage.setItem(historyKey(), JSON.stringify(history));
   } catch {
-    // 저장 공간이 꽉 찬 경우 등은 무시 (히스토리 유지는 보너스 기능이라 실패해도 괜찮음)
+    // 무시 (히스토리 유지는 보너스 기능이라 실패해도 괜찮음)
   }
 }
 
-// 리액션이 바뀌면 sessionStorage에 저장해둔 히스토리에도 반영해서, 새로고침해도
-// 리액션 상태가 유지되게 함
-function updateHistoryReactions(messageId, reactionsObj) {
+// 저장해둔 히스토리 중 해당 메시지의 payload를 고쳐서, 새로고침해도 리액션/삭제/
+// 수정 상태가 유지되게 함
+function updateHistoryEntry(messageId, mutate) {
   const history = loadHistory();
   let changed = false;
   for (const entry of history) {
     if (entry.kind === 'chat' && entry.payload && entry.payload.id === messageId) {
-      entry.payload.reactions = reactionsObj;
+      mutate(entry.payload);
       changed = true;
     }
   }
-  if (changed) {
-    try {
-      sessionStorage.setItem(historyKey(), JSON.stringify(history));
-    } catch {
-      // 무시
-    }
-  }
+  if (changed) saveHistory(history);
 }
 
-function markDeletedInHistory(messageId) {
-  const history = loadHistory();
-  let changed = false;
-  for (const entry of history) {
-    if (entry.kind === 'chat' && entry.payload && entry.payload.id === messageId) {
-      entry.payload.deleted = true;
-      changed = true;
-    }
-  }
-  if (changed) {
-    try {
-      sessionStorage.setItem(historyKey(), JSON.stringify(history));
-    } catch {
-      // 무시
-    }
-  }
+function findMessageEl(messageId) {
+  return messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
 }
 
 // --- 테마 선택 (시스템 설정보다 수동 선택이 우선 적용됨) ---
@@ -343,14 +328,10 @@ function join() {
 }
 
 joinBtn.addEventListener('click', join);
-nicknameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') join();
-});
-roomInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') join();
-});
-pinInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') join();
+[nicknameInput, roomInput, pinInput].forEach((input) => {
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') join();
+  });
 });
 
 // 소켓이 (재)연결될 때마다 실행됨 — 페이지를 새로고침한 첫 연결이든, 네트워크가
@@ -593,33 +574,17 @@ messagesEl.addEventListener('click', (e) => {
 });
 
 socket.on('message-edited', ({ messageId, content, editedAt }) => {
-  const msgEl = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+  const msgEl = findMessageEl(messageId);
   if (msgEl) {
     renderLinkedText(msgEl.querySelector('.msg-body'), content, currentRoomUsers);
     const timeEl = msgEl.querySelector('.msg-time');
     if (timeEl && !timeEl.textContent.includes('(수정됨)')) timeEl.textContent += ' (수정됨)';
   }
-  updateHistoryContent(messageId, content);
+  updateHistoryEntry(messageId, (p) => {
+    p.content = content;
+    p.edited = true;
+  });
 });
-
-function updateHistoryContent(messageId, content) {
-  const history = loadHistory();
-  let changed = false;
-  for (const entry of history) {
-    if (entry.kind === 'chat' && entry.payload && entry.payload.id === messageId) {
-      entry.payload.content = content;
-      entry.payload.edited = true;
-      changed = true;
-    }
-  }
-  if (changed) {
-    try {
-      sessionStorage.setItem(historyKey(), JSON.stringify(history));
-    } catch {
-      // 무시
-    }
-  }
-}
 
 // --- 답장 ---
 let pendingReplyTo = null;
@@ -644,17 +609,21 @@ function clearReply() {
 replyCancelBtn.addEventListener('click', clearReply);
 
 socket.on('reaction-update', ({ messageId, reactions }) => {
-  const msgEl = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+  const msgEl = findMessageEl(messageId);
   if (msgEl) {
     renderReactions(msgEl.querySelector('.msg-reactions'), reactions);
   }
-  updateHistoryReactions(messageId, reactions);
+  updateHistoryEntry(messageId, (p) => {
+    p.reactions = reactions;
+  });
 });
 
 socket.on('message-deleted', ({ messageId }) => {
-  const msgEl = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+  const msgEl = findMessageEl(messageId);
   if (msgEl) applyDeletedState(msgEl);
-  markDeletedInHistory(messageId);
+  updateHistoryEntry(messageId, (p) => {
+    p.deleted = true;
+  });
 });
 
 function applyDeletedState(msgEl) {
@@ -994,30 +963,33 @@ document.addEventListener('click', (e) => {
 // 서버 파일시스템에는 저장 안 함(Render 무료 플랜은 재시작하면 파일이 날아감).
 // 대신 브라우저에서 캔버스로 리사이즈/압축한 뒤 base64로 DB에 저장함 — 7일 지나면
 // 자동 삭제되니 무료 DB 용량도 자연스럽게 관리됨.
-function resizeImageFile(file, maxDimension, quality) {
+function loadImageFromFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
       const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDimension || height > maxDimension) {
-          const scale = maxDimension / Math.max(width, height);
-          width = Math.round(width * scale);
-          height = Math.round(height * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
+      img.onload = () => resolve(img);
       img.onerror = () => reject(new Error('이미지를 읽지 못했습니다'));
       img.src = reader.result;
     };
     reader.onerror = () => reject(new Error('파일을 읽지 못했습니다'));
     reader.readAsDataURL(file);
   });
+}
+
+async function resizeImageFile(file, maxDimension, quality) {
+  const img = await loadImageFromFile(file);
+  let { width, height } = img;
+  if (width > maxDimension || height > maxDimension) {
+    const scale = maxDimension / Math.max(width, height);
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+  return canvas.toDataURL('image/jpeg', quality);
 }
 
 attachBtn.addEventListener('click', () => fileInput.click());
@@ -1111,7 +1083,7 @@ document.addEventListener('keydown', (e) => {
 // --- 답장 인용 클릭 시 원본 메시지로 스크롤 ---
 function scrollToMessage(messageId) {
   if (!messageId) return;
-  const target = messagesEl.querySelector(`[data-message-id="${CSS.escape(messageId)}"]`);
+  const target = findMessageEl(messageId);
   if (!target) return; // "이전 메시지 더 보기"로 아직 안 불러온 경우 등 — 조용히 무시
 
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1120,27 +1092,16 @@ function scrollToMessage(messageId) {
 }
 
 // --- 프로필 사진 설정 ---
-function resizeImageSquare(file, size, quality) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const side = Math.min(img.width, img.height);
-        const sx = (img.width - side) / 2;
-        const sy = (img.height - side) / 2;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.onerror = () => reject(new Error('이미지를 읽지 못했습니다'));
-      img.src = reader.result;
-    };
-    reader.onerror = () => reject(new Error('파일을 읽지 못했습니다'));
-    reader.readAsDataURL(file);
-  });
+async function resizeImageSquare(file, size, quality) {
+  const img = await loadImageFromFile(file);
+  const side = Math.min(img.width, img.height);
+  const sx = (img.width - side) / 2;
+  const sy = (img.height - side) / 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
+  return canvas.toDataURL('image/jpeg', quality);
 }
 
 // 내 메시지 말풍선엔 원래 닉네임/아바타를 안 보여줘서(색으로만 구분), 프로필
@@ -1176,10 +1137,10 @@ avatarFileInput.addEventListener('change', async () => {
 
   try {
     let dataUrl = await resizeImageSquare(file, 200, 0.85);
-    if (dataUrl.length > 250_000) {
+    if (dataUrl.length > AVATAR_MAX_LENGTH) {
       dataUrl = await resizeImageSquare(file, 120, 0.7); // 그래도 크면 한 번 더 압축
     }
-    if (dataUrl.length > 250_000) {
+    if (dataUrl.length > AVATAR_MAX_LENGTH) {
       alert('프로필 사진 용량이 너무 큽니다. 더 작은 사진을 선택해주세요.');
       return;
     }
