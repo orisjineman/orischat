@@ -1,14 +1,16 @@
 import { HISTORY_PAGE_SIZE, NEAR_BOTTOM_THRESHOLD } from './constants.js';
-import { messagesEl, scrollBottomBtn, typingIndicator } from './elements.js';
+import { messagesEl, scrollBottomBtn, scrollBottomCount, typingIndicator } from './elements.js';
 import { clearHistory, loadHistory, saveToHistory, updateHistoryEntry } from './historyStore.js';
 import { createAvatarEl } from './avatar.js';
 import { openLightbox } from './lightbox.js';
+import { showToast } from './toast.js';
 import { maybeNotify } from './notifications.js';
 import { maybeMarkRead } from './read.js';
 import { openReactionPopup, renderReactions, sendReaction } from './reactions.js';
 import { startReply } from './reply.js';
 import { socket } from './socket.js';
-import { escapeHtml, formatTime, renderLinkedText } from './text.js';
+import { escapeHtml, formatDateLabel, formatTime, isSameDay, renderLinkedText } from './text.js';
+import { bumpTitleUnread } from './unread.js';
 import { state } from './state.js';
 
 function findMessageEl(messageId) {
@@ -41,6 +43,7 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
       ${mine && !deleted ? '<span class="read-status"></span>' : ''}
       ${id && !deleted ? '<button type="button" class="reply-btn" aria-label="답장">↩</button>' : ''}
       ${id && !deleted ? '<button type="button" class="react-btn" aria-label="반응 추가">🙂</button>' : ''}
+      ${id && kind === 'text' && !deleted ? '<button type="button" class="copy-btn" aria-label="복사">📋</button>' : ''}
       ${id && mine && kind === 'text' && !deleted ? '<button type="button" class="edit-btn" aria-label="수정">✏️</button>' : ''}
       ${id && mine && !deleted ? '<button type="button" class="delete-btn" aria-label="삭제">🗑</button>' : ''}
     </div>
@@ -88,7 +91,7 @@ function applyDeletedState(msgEl) {
   if (body) body.textContent = '삭제된 메시지입니다';
   const reactionsEl = msgEl.querySelector('.msg-reactions');
   if (reactionsEl) reactionsEl.innerHTML = '';
-  ['.react-btn', '.delete-btn', '.reply-btn', '.edit-btn'].forEach((sel) => {
+  ['.react-btn', '.delete-btn', '.reply-btn', '.edit-btn', '.copy-btn'].forEach((sel) => {
     const el = msgEl.querySelector(sel);
     if (el) el.remove();
   });
@@ -101,19 +104,67 @@ function isNearBottom() {
   return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < NEAR_BOTTOM_THRESHOLD;
 }
 
+// 스크롤을 올려두고 읽는 동안 새로 온 (남의) 메시지 수 — ⬇ 버튼에 배지로 보여줌
+let unreadBelow = 0;
+
+function updateUnreadBadge() {
+  scrollBottomCount.textContent = unreadBelow > 99 ? '99+' : String(unreadBelow);
+  scrollBottomCount.classList.toggle('hidden', unreadBelow === 0);
+}
+
+function resetUnreadBelow() {
+  unreadBelow = 0;
+  updateUnreadBadge();
+}
+
 function scrollToBottom(behavior = 'auto') {
   messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior });
   scrollBottomBtn.classList.add('hidden');
+  resetUnreadBelow();
+}
+
+// --- 날짜 구분선 ---
+function createDateDivider(time) {
+  const div = document.createElement('div');
+  div.className = 'date-divider';
+  div.textContent = formatDateLabel(time);
+  return div;
+}
+
+function lastTimedMessageEl() {
+  for (let el = messagesEl.lastElementChild; el; el = el.previousElementSibling) {
+    if (el.dataset && el.dataset.time) return el;
+  }
+  return null;
+}
+
+// 위쪽에 이전 메시지를 붙인 뒤에는 구분선을 통째로 다시 계산함
+function rebuildDateDividers() {
+  messagesEl.querySelectorAll('.date-divider').forEach((el) => el.remove());
+  let prevTime = null;
+  Array.from(messagesEl.querySelectorAll('.msg[data-time]')).forEach((el) => {
+    const t = Number(el.dataset.time);
+    if (prevTime === null || !isSameDay(prevTime, t)) el.before(createDateDivider(t));
+    prevTime = t;
+  });
 }
 
 function appendMessage(payload) {
   const wasNearBottom = isNearBottom();
   const div = buildMessageEl(payload);
+  if (payload.time) {
+    const prev = lastTimedMessageEl();
+    if (!prev || !isSameDay(Number(prev.dataset.time), payload.time)) messagesEl.appendChild(createDateDivider(payload.time));
+  }
   messagesEl.appendChild(div);
   if (wasNearBottom) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
   } else {
     scrollBottomBtn.classList.remove('hidden');
+    if (!payload.mine && !payload.isHistory) {
+      unreadBelow += 1;
+      updateUnreadBadge();
+    }
   }
 }
 
@@ -132,7 +183,9 @@ scrollBottomBtn.addEventListener('click', () => scrollToBottom('smooth'));
 // 돌아오면 다시 숨김 — 새 메시지가 왔을 때뿐 아니라 언제든 쓸 수 있게 함
 messagesEl.addEventListener('scroll', () => {
   const scrollable = messagesEl.scrollHeight > messagesEl.clientHeight + NEAR_BOTTOM_THRESHOLD;
-  scrollBottomBtn.classList.toggle('hidden', !scrollable || isNearBottom());
+  const near = isNearBottom();
+  scrollBottomBtn.classList.toggle('hidden', !scrollable || near);
+  if (near) resetUnreadBelow();
 });
 
 // 답장 인용 클릭 시 원본 메시지로 스크롤
@@ -174,6 +227,13 @@ messagesEl.addEventListener('click', (e) => {
     return;
   }
 
+  const copyBtn = e.target.closest('.copy-btn');
+  if (copyBtn) {
+    const body = copyBtn.closest('.msg').querySelector('.msg-body');
+    copyText(body ? body.textContent : '');
+    return;
+  }
+
   const editBtn = e.target.closest('.edit-btn');
   if (editBtn) {
     const msgEl = editBtn.closest('.msg');
@@ -198,7 +258,59 @@ messagesEl.addEventListener('click', (e) => {
   if (pill) {
     const msgEl = pill.closest('.msg');
     sendReaction(msgEl.dataset.messageId, pill.dataset.emoji);
+    return;
   }
+
+  // 그 밖에 말풍선을 탭하면 액션 버튼(답장/반응/복사...)을 펼치거나 접음 (터치 기기용)
+  if (e.target.closest('a, .avatar-clickable')) return;
+  const tapped = e.target.closest('.msg:not(.system)');
+  messagesEl.querySelectorAll('.msg.actions-open').forEach((el) => {
+    if (el !== tapped) el.classList.remove('actions-open');
+  });
+  if (tapped) tapped.classList.toggle('actions-open');
+});
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+    } catch {
+      // 복사 실패는 조용히 무시
+    }
+    ta.remove();
+  }
+  showToast('복사했어요');
+}
+
+// --- 길게 눌러서 답장 (터치 기기) ---
+const LONG_PRESS_MS = 550;
+let longPressTimer = null;
+
+function cancelLongPress() {
+  clearTimeout(longPressTimer);
+  longPressTimer = null;
+}
+
+messagesEl.addEventListener('touchstart', (e) => {
+  const msgEl = e.target.closest('.msg:not(.system):not(.deleted)');
+  if (!msgEl || !msgEl.dataset.messageId || e.target.closest('button, a, img')) return;
+  cancelLongPress();
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null;
+    startReply(msgEl);
+    if (navigator.vibrate) navigator.vibrate(30);
+  }, LONG_PRESS_MS);
+}, { passive: true });
+['touchend', 'touchmove', 'touchcancel'].forEach((type) => {
+  messagesEl.addEventListener(type, cancelLongPress, { passive: true });
 });
 
 // --- 이전 메시지 더 보기(페이지네이션) ---
@@ -215,6 +327,7 @@ function prependMessages(list) {
   const frag = document.createDocumentFragment();
   list.forEach((payload) => frag.appendChild(buildMessageEl(payload)));
   messagesEl.insertBefore(frag, messagesEl.firstChild);
+  rebuildDateDividers();
   messagesEl.scrollTop = prevTop + (messagesEl.scrollHeight - prevHeight);
 }
 
@@ -239,13 +352,14 @@ loadMoreBtn.addEventListener('click', () => {
 
 // 새로고침 시 sessionStorage에 저장해둔 이전 대화를 먼저 복원
 loadHistory().forEach((entry) => {
-  if (entry.kind === 'chat') appendMessage(entry.payload);
+  if (entry.kind === 'chat') appendMessage({ ...entry.payload, isHistory: true });
   else if (entry.kind === 'system') appendSystemMessage(entry.text);
 });
 
 // --- 서버 이벤트 ---
 socket.on('chat-message', (payload) => {
   appendMessage(payload);
+  if (!payload.mine) bumpTitleUnread();
   saveToHistory({ kind: 'chat', payload });
   maybeNotify(payload);
   if (payload.time > state.latestMessageTime) state.latestMessageTime = payload.time;
@@ -258,8 +372,9 @@ socket.on('chat-message', (payload) => {
 socket.on('history', (messages) => {
   messagesEl.innerHTML = '';
   clearHistory();
+  resetUnreadBelow();
   messages.forEach((payload) => {
-    appendMessage(payload);
+    appendMessage({ ...payload, isHistory: true });
     saveToHistory({ kind: 'chat', payload });
   });
   state.oldestMessageTime = messages.length ? messages[0].time : null;

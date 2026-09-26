@@ -871,6 +871,7 @@ body {
 .react-btn,
 .reply-btn,
 .edit-btn,
+.copy-btn,
 .delete-btn {
   border: none;
   background: none;
@@ -878,17 +879,40 @@ body {
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0.5;
+  /* 평소엔 숨겨두고(자리는 유지) 마우스를 올리거나 탭했을 때만 보여줌 */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.msg:hover .react-btn,
+.msg:hover .reply-btn,
+.msg:hover .edit-btn,
+.msg:hover .copy-btn,
+.msg:hover .delete-btn,
+.msg.actions-open .react-btn,
+.msg.actions-open .reply-btn,
+.msg.actions-open .edit-btn,
+.msg.actions-open .copy-btn,
+.msg.actions-open .delete-btn,
+.msg:focus-within .react-btn,
+.msg:focus-within .reply-btn,
+.msg:focus-within .edit-btn,
+.msg:focus-within .copy-btn,
+.msg:focus-within .delete-btn {
+  opacity: 0.55;
+  pointer-events: auto;
 }
 
 .react-btn {
   font-size: 13px;
 }
 
-.react-btn:hover,
-.reply-btn:hover,
-.edit-btn:hover,
-.delete-btn:hover {
+.msg .react-btn:hover,
+.msg .reply-btn:hover,
+.msg .edit-btn:hover,
+.msg .copy-btn:hover,
+.msg .delete-btn:hover {
   opacity: 1;
 }
 
@@ -1237,6 +1261,7 @@ body {
   .react-btn,
   .reply-btn,
   .edit-btn,
+  .copy-btn,
   .delete-btn {
     padding: 6px;
     font-size: 15px;
@@ -1260,4 +1285,91 @@ body {
   #message-form button[type='submit'] {
     padding: 10px 14px;
   }
+}
+
+/* 날짜 구분선 */
+.date-divider {
+  align-self: center;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bubble-other);
+  padding: 3px 12px;
+  border-radius: 999px;
+  margin: 6px 0;
+}
+
+/* 연결 끊김/서버 깨어나는 중 안내 */
+#connection-banner {
+  background: #b26a00;
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px 12px;
+}
+
+/* ⬇ 버튼의 새 메시지 수 배지 */
+#scroll-bottom-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* @멘션 자동완성 */
+#mention-popup {
+  position: absolute;
+  left: 20px;
+  bottom: 72px;
+  min-width: 160px;
+  max-width: calc(100% - 40px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 15;
+}
+
+.mention-item {
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mention-item.active,
+.mention-item:hover {
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+}
+
+/* 사진을 끌어다 놓을 때 나오는 안내 */
+#drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 3px dashed var(--accent);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+  pointer-events: none;
 }

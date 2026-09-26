@@ -876,3 +876,192 @@ test('Notification API가 없는 환경에서는 알림 버튼이 숨겨진다',
   const { $ } = await boot();
   assert.ok($('#notify-btn').classList.contains('hidden'));
 });
+
+// ---------------------------------------------------------------- 사용성 개선
+
+test('날짜가 바뀌는 지점마다 날짜 구분선이 들어간다', async () => {
+  const { socket, $$ } = await bootJoined();
+  const day = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  socket.trigger('chat-message', chatMsg({ id: 'a', time: now - 3 * day }));
+  socket.trigger('chat-message', chatMsg({ id: 'b', time: now - 3 * day + 1000 }));
+  socket.trigger('chat-message', chatMsg({ id: 'c', time: now - day }));
+  socket.trigger('chat-message', chatMsg({ id: 'd', time: now }));
+  const labels = $$('.date-divider').map((el) => el.textContent);
+  assert.equal(labels.length, 3);
+  assert.equal(labels[1], '어제');
+  assert.equal(labels[2], '오늘');
+});
+
+test('이전 메시지를 위에 붙이면 구분선이 다시 계산된다', async () => {
+  const { socket, $, $$ } = await bootJoined();
+  const t = Date.now();
+  socket.trigger('history', Array.from({ length: 50 }, (_, i) => chatMsg({ id: `h${i}`, time: t - 1000 + i })));
+  assert.equal($$('.date-divider').length, 1);
+  $('#load-more-btn').click();
+  const cb = socket.lastSent('load-more').args[1];
+  cb([chatMsg({ id: 'old', time: t - 5 * 24 * 60 * 60 * 1000 })]);
+  assert.equal($$('.date-divider').length, 2);
+  assert.equal($('#messages').firstElementChild.className, 'date-divider');
+});
+
+test('텍스트 메시지에는 복사 버튼이 있고, 스티커/삭제된 메시지에는 없다', async () => {
+  const { socket, $$ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 't' }));
+  socket.trigger('chat-message', chatMsg({ id: 's', type: 'sticker', content: 'a.png' }));
+  socket.trigger('chat-message', chatMsg({ id: 'd', deleted: true }));
+  assert.equal($$('.copy-btn').length, 1);
+});
+
+test('복사 버튼을 누르면 본문이 클립보드로 가고 토스트가 뜬다', async () => {
+  const { socket, window, $ } = await bootJoined();
+  let copied = null;
+  Object.defineProperty(window.navigator, 'clipboard', { value: { writeText: async (t) => (copied = t) }, configurable: true });
+  socket.trigger('chat-message', chatMsg({ content: '복사할 글' }));
+  $('.copy-btn').click();
+  await tick();
+  assert.equal(copied, '복사할 글');
+  assert.equal($('#rate-limit-toast').textContent, '복사했어요');
+  assert.ok($('#rate-limit-toast').classList.contains('show'));
+});
+
+test('말풍선을 탭하면 액션 버튼이 펼쳐지고, 다시 탭하면 접힌다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg());
+  $('.msg-body').click();
+  assert.ok($('.msg').classList.contains('actions-open'));
+  $('.msg-body').click();
+  assert.ok(!$('.msg').classList.contains('actions-open'));
+});
+
+test('탭이 가려진 동안 남의 메시지가 오면 탭 제목에 안 읽은 수가 붙고, 돌아오면 사라진다', async () => {
+  const { socket, document, fire } = await bootJoined();
+  const base = document.title;
+  Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+  socket.trigger('chat-message', chatMsg({ id: 'u1' }));
+  socket.trigger('chat-message', chatMsg({ id: 'u2', mine: true }));
+  socket.trigger('chat-message', chatMsg({ id: 'u3' }));
+  assert.equal(document.title, `(2) ${base}`);
+  Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+  fire(document, 'visibilitychange');
+  assert.equal(document.title, base);
+});
+
+test('스크롤을 올려 읽는 중 새 메시지가 오면 ⬇ 버튼에 개수가 뜨고, 맨 아래로 가면 사라진다', async () => {
+  const { socket, $ } = await bootJoined();
+  const messages = $('#messages');
+  Object.defineProperty(messages, 'scrollHeight', { value: 2000, configurable: true });
+  Object.defineProperty(messages, 'clientHeight', { value: 500, configurable: true });
+  Object.defineProperty(messages, 'scrollTop', { value: 0, configurable: true, writable: true });
+  socket.trigger('chat-message', chatMsg({ id: 'n1' }));
+  socket.trigger('chat-message', chatMsg({ id: 'n2', mine: true }));
+  socket.trigger('chat-message', chatMsg({ id: 'n3' }));
+  assert.equal($('#scroll-bottom-count').textContent, '2');
+  assert.ok(!$('#scroll-bottom-count').classList.contains('hidden'));
+  $('#scroll-bottom-btn').click();
+  assert.ok($('#scroll-bottom-count').classList.contains('hidden'));
+});
+
+test('연결이 끊기면 안내 배너가 뜨고, 다시 연결되면 사라진다', async () => {
+  const { socket, $ } = await bootJoined();
+  assert.ok($('#connection-banner').classList.contains('hidden'));
+  socket.trigger('disconnect');
+  assert.ok(!$('#connection-banner').classList.contains('hidden'));
+  socket.trigger('connect');
+  assert.ok($('#connection-banner').classList.contains('hidden'));
+});
+
+test('쓰던 글은 방별로 임시저장되고, 다시 입장하면 복원되며, 전송하면 지워진다', async () => {
+  const { socket, window, $, fire } = await bootJoined();
+  const input = $('#message-input');
+  input.value = '쓰다 만 글';
+  fire(input, 'input');
+  assert.equal(window.sessionStorage.getItem('orischat-draft-general'), '쓰다 만 글');
+
+  input.value = '';
+  socket.trigger('joined', { nickname: '나', room: 'general' });
+  assert.equal(input.value, '쓰다 만 글');
+
+  $('#message-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(window.sessionStorage.getItem('orischat-draft-general'), null);
+});
+
+test('한글 조합 중 Enter는 기본 동작(폼 전송)이 막힌다', async () => {
+  const { window, $ } = await bootJoined();
+  const ev = new window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true });
+  $('#message-input').dispatchEvent(ev);
+  assert.equal(ev.defaultPrevented, true);
+  const plain = new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  $('#message-input').dispatchEvent(plain);
+  assert.equal(plain.defaultPrevented, false);
+});
+
+test('@를 입력하면 방 사람 목록이 뜨고, 고르면 입력창에 채워진다', async () => {
+  const { socket, $, $$, fire, key } = await bootJoined();
+  socket.trigger('user-list', ['나', '철수', '영희', '철민']);
+  const input = $('#message-input');
+  input.value = '안녕 @철';
+  input.setSelectionRange(input.value.length, input.value.length);
+  fire(input, 'input');
+  assert.deepEqual($$('.mention-item').map((el) => el.textContent), ['@철수', '@철민']);
+
+  key(input, 'ArrowDown');
+  key(input, 'Enter');
+  assert.equal(input.value, '안녕 @철민 ');
+  assert.ok($('#mention-popup').classList.contains('hidden'));
+});
+
+test('@ 뒤에 일치하는 사람이 없으면 목록이 안 뜨고, 나 자신은 목록에 없다', async () => {
+  const { socket, $, fire } = await bootJoined();
+  socket.trigger('user-list', ['나', '철수']);
+  const input = $('#message-input');
+  input.value = '@나';
+  input.setSelectionRange(2, 2);
+  fire(input, 'input');
+  assert.ok($('#mention-popup').classList.contains('hidden'));
+  input.value = '@zzz';
+  input.setSelectionRange(4, 4);
+  fire(input, 'input');
+  assert.ok($('#mention-popup').classList.contains('hidden'));
+});
+
+test('이메일처럼 @ 앞에 글자가 붙어 있으면 멘션 목록을 띄우지 않는다', async () => {
+  const { socket, $, fire } = await bootJoined();
+  socket.trigger('user-list', ['나', '철수']);
+  const input = $('#message-input');
+  input.value = 'a@철';
+  input.setSelectionRange(3, 3);
+  fire(input, 'input');
+  assert.ok($('#mention-popup').classList.contains('hidden'));
+});
+
+test('이미지를 붙여넣으면 기본 붙여넣기가 막히고, 텍스트 붙여넣기는 그대로 둔다', async () => {
+  const { window, $ } = await bootJoined();
+  const paste = (files) => {
+    const ev = new window.Event('paste', { bubbles: true, cancelable: true });
+    ev.clipboardData = { files };
+    $('#message-input').dispatchEvent(ev);
+    return ev;
+  };
+  const img = new window.File(['x'], 'a.png', { type: 'image/png' });
+  assert.equal(paste([img]).defaultPrevented, true);
+  assert.equal(paste([]).defaultPrevented, false);
+});
+
+test('파일을 끌어오면 안내가 뜨고, 놓거나 벗어나면 사라진다', async () => {
+  const { window, $ } = await bootJoined();
+  const drag = (type, extra = {}) => {
+    const ev = new window.Event(type, { bubbles: true, cancelable: true });
+    ev.dataTransfer = { types: ['Files'], files: [], ...extra };
+    $('#chat-main').dispatchEvent(ev);
+    return ev;
+  };
+  drag('dragenter');
+  assert.ok(!$('#drop-overlay').classList.contains('hidden'));
+  drag('dragleave');
+  assert.ok($('#drop-overlay').classList.contains('hidden'));
+  drag('dragenter');
+  const drop = drag('drop');
+  assert.equal(drop.defaultPrevented, true);
+  assert.ok($('#drop-overlay').classList.contains('hidden'));
+});

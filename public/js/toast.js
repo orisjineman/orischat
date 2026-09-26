@@ -7,11 +7,14 @@ rateLimitToast.textContent = '너무 빨라요! 잠시 후 다시 시도해주�
 document.body.appendChild(rateLimitToast);
 
 let rateLimitToastTimer = null;
-socket.on('rate-limited', () => {
+export function showToast(text, ms = 2000) {
+  rateLimitToast.textContent = text;
   rateLimitToast.classList.add('show');
   clearTimeout(rateLimitToastTimer);
-  rateLimitToastTimer = setTimeout(() => rateLimitToast.classList.remove('show'), 2000);
-});
+  rateLimitToastTimer = setTimeout(() => rateLimitToast.classList.remove('show'), ms);
+}
+
+socket.on('rate-limited', () => showToast('너무 빨라요! 잠시 후 다시 시도해주세요.'));
 
 socket.on('upload-error', (msg) => {
   alert(msg);

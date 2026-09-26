@@ -1,6 +1,8 @@
-import { IMAGE_MAX_LENGTH } from './constants.js';
+import { DEFAULT_ROOM, IMAGE_MAX_LENGTH } from './constants.js';
 import {
   attachBtn,
+  chatMain,
+  dropOverlay,
   emojiBtn,
   emojiPicker,
   fileInput,
@@ -31,10 +33,39 @@ messageForm.addEventListener('submit', (e) => {
   if (!text) return;
   sendChatMessage({ type: 'text', content: text });
   messageInput.value = '';
+  saveDraft();
   socket.emit('typing', false);
 });
 
+// 한글 등 IME로 글자를 조합하는 중의 Enter는 "조합 확정"이지 전송이 아님
+messageInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) e.preventDefault();
+});
+
+// --- 입력 중이던 글 임시저장 (방마다, 새로고침해도 유지 / 탭을 닫으면 사라짐) ---
+const draftKey = () => `orischat-draft-${state.room || DEFAULT_ROOM}`;
+
+function saveDraft() {
+  try {
+    if (messageInput.value) sessionStorage.setItem(draftKey(), messageInput.value);
+    else sessionStorage.removeItem(draftKey());
+  } catch {
+    // 저장 실패는 무시 (필수 기능 아님)
+  }
+}
+
+socket.on('joined', () => {
+  if (messageInput.value) return;
+  try {
+    const draft = sessionStorage.getItem(draftKey());
+    if (draft) messageInput.value = draft;
+  } catch {
+    // 무시
+  }
+});
+
 messageInput.addEventListener('input', () => {
+  saveDraft();
   socket.emit('typing', true);
   clearTimeout(typingTimeout);
   typingTimeout = setTimeout(() => socket.emit('typing', false), 1500);
@@ -88,11 +119,7 @@ document.addEventListener('click', (e) => {
 // --- 사진 첨부 ---
 attachBtn.addEventListener('click', () => fileInput.click());
 
-fileInput.addEventListener('change', async () => {
-  const file = fileInput.files[0];
-  fileInput.value = '';
-  if (!file) return;
-
+async function sendImageFile(file) {
   try {
     let dataUrl = await resizeImageFile(file, 1280, 0.7);
     if (dataUrl.length > IMAGE_MAX_LENGTH) {
@@ -106,4 +133,47 @@ fileInput.addEventListener('change', async () => {
   } catch {
     alert('이미지를 처리하지 못했습니다.');
   }
+}
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  fileInput.value = '';
+  if (file) await sendImageFile(file);
+});
+
+// --- 사진 붙여넣기(Ctrl+V) / 끌어다 놓기 ---
+function imageFrom(list) {
+  return Array.from(list || []).find((f) => f && f.type && f.type.startsWith('image/'));
+}
+
+messageInput.addEventListener('paste', (e) => {
+  const file = imageFrom(e.clipboardData && e.clipboardData.files);
+  if (!file) return; // 텍스트 붙여넣기는 그대로 진행
+  e.preventDefault();
+  sendImageFile(file);
+});
+
+let dragDepth = 0;
+const hasFiles = (e) => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+
+chatMain.addEventListener('dragenter', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth += 1;
+  dropOverlay.classList.remove('hidden');
+});
+chatMain.addEventListener('dragover', (e) => {
+  if (hasFiles(e)) e.preventDefault();
+});
+chatMain.addEventListener('dragleave', () => {
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) dropOverlay.classList.add('hidden');
+});
+chatMain.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  dropOverlay.classList.add('hidden');
+  const file = imageFrom(e.dataTransfer.files);
+  if (file) sendImageFile(file);
 });

@@ -65,3 +65,22 @@ export function renderLinkedText(container, text, mentionNames = []) {
     container.appendChild(document.createTextNode(text.slice(lastIndex)));
   }
 }
+
+// 대화 사이의 날짜 구분선 문구: 오늘 / 어제 / 9월 25일 목요일 / (다른 해면) 2025년 9월 25일
+export function isSameDay(a, b) {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+
+export function formatDateLabel(ts, now = Date.now()) {
+  if (isSameDay(ts, now)) return '오늘';
+  if (isSameDay(ts, now - 24 * 60 * 60 * 1000)) return '어제';
+  const sameYear = new Date(ts).getFullYear() === new Date(now).getFullYear();
+  return new Date(ts).toLocaleDateString('ko-KR', {
+    ...(sameYear ? {} : { year: 'numeric' }),
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  });
+}
