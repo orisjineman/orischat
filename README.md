@@ -21,7 +21,7 @@
 - 안 읽은 메시지 구분선 — 다시 들어오면 마지막으로 본 곳 다음 메시지 앞에 "여기서부터 안 읽은 메시지" 표시
 - 같은 방에서 닉네임 중복 방지 (같은 브라우저의 재연결/다른 탭은 허용)
 - 메시지 링크 자동 하이퍼링크
-- 사진/스티커 클릭 시 확대해서 보기(라이트박스)
+- 사진/GIF/스티커 클릭 시 확대해서 보기(라이트박스)
 - 답장 인용문 클릭하면 원본 메시지로 스크롤 이동
 - 이전 대화를 읽으려고 위로 스크롤하면 새 메시지가 와도 화면이 안 당겨지고, ⬇ 버튼으로 원할 때 맨 아래로 이동
 - 프로필 사진 (닉네임 기준으로 저장, 안 설정하면 이니셜 원형 배지, 클릭하면 확대해서 보기)
@@ -29,14 +29,14 @@
 - 닉네임별 고정 아바타 색상 (프로필 사진 없을 때)
 - "이전 메시지 더 보기"로 지난 대화 페이지 단위로 불러오기
 - 브라우저 알림 — [Web Push](https://web.dev/push-notifications-overview/) 설정 시 브라우저/탭을 완전히 닫아도 알림 수신, 미설정 시에도 탭이 안 보일 때는 알림(포그라운드 한정)
-- 도배 방지 (짧은 시간에 메시지/리액션을 너무 많이 보내면 잠시 제한)
+- 도배 방지 (짧은 시간에 메시지/리액션을 너무 많이 보내면 잠시 제한, GIF 검색도 IP당 분당 제한)
 - 입장 비밀번호 (선택, `CHAT_PIN` 환경 변수로 설정)
 - 메시지/리액션/프로필 사진/푸시 구독 영구 저장 ([Turso](https://turso.tech) 연동 시, 서버 재시작해도 대화 유지 / 7일 지난 메시지는 자동 삭제)
 - 새로고침해도 대화 유지 (탭을 닫으면 초기화), 쓰던 글도 방별로 임시저장
 - 날짜 구분선(오늘/어제/날짜), 탭 제목에 안 읽은 메시지 수 `(3) OrisChat`
 - 메시지 복사 버튼, 액션 버튼(답장/반응/복사/수정/삭제)은 마우스를 올리거나 탭했을 때만 표시, 터치 기기에서는 길게 눌러 답장
 - 연결이 끊기거나 서버가 깨어나는 중이면 안내 배너 표시
-- 라이트 / 다크 모드 자동 대응 + 수동 선택 (IntelliJ, Excel 테마도 있음)
+- 테마 선택 — 시스템 설정 따라가기 / 라이트 / 다크 / IntelliJ / Excel (IntelliJ·Excel은 리본 메뉴, 수식 입력줄, IDE 메뉴바·탭·상태바까지 흉내 낸 "업무 중인 척" 테마)
 - PWA (홈 화면에 추가해서 앱처럼 사용 가능)
 - 다른 사람에게 내 영구 식별자가 노출되지 않음 (닉네임을 바꿔도 안 변하는 값이라 추적 우려가 있어, 서버가 "내가 쓴 메시지인지"만 계산해서 알려주고 원래 값은 절대 넘기지 않음)
 
@@ -68,13 +68,30 @@ PORT=4000 npm start
 CHAT_PIN=1234 npm start
 ```
 
-GIF 검색을 켜려면 [GIPHY 개발자 페이지](https://developers.giphy.com/)에서 무료 API 키를 발급받아 설정하세요. 키는 서버에서만 쓰고 브라우저에는 노출되지 않습니다 (안 정하면 GIF 버튼이 숨겨짐).
+Render에 배포한 경우 대시보드의 **Environment** 탭에서 환경 변수를 추가하면 됩니다.
+
+### 환경 변수
+
+모두 선택 사항이라, 아무것도 설정하지 않아도 서버가 뜹니다 (해당 기능만 꺼짐).
+
+| 변수 | 역할 | 안 정하면 |
+| --- | --- | --- |
+| `PORT` | 서버 포트 | 3000 |
+| `CHAT_PIN` | 입장 비밀번호 | 누구나 입장 가능 |
+| `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN` | 영구 저장 (아래 참고) | 메모리에만 저장 |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | 백그라운드 푸시 알림 (아래 참고) | 푸시만 꺼짐 |
+| `GIPHY_API_KEY` | GIF 검색 (아래 참고) | GIF 버튼이 숨겨짐 |
+
+### GIF 검색 (GIPHY)
+
+1. [GIPHY 개발자 페이지](https://developers.giphy.com/)에서 로그인 후 **Create API Key**로 무료(Beta) 키를 발급받습니다 (앱 이름 입력, Platform은 **Web**, 설명 입력, 약관 동의).
+2. 발급받은 키를 `GIPHY_API_KEY` 환경 변수로 설정합니다.
 
 ```bash
 GIPHY_API_KEY=xxxx npm start
 ```
 
-Render에 배포한 경우 대시보드의 **Environment** 탭에서 환경 변수를 추가하면 됩니다.
+키는 서버에서만 쓰고 브라우저에는 노출되지 않습니다 (브라우저는 서버의 `/api/gifs`로 검색하고, 서버가 GIPHY를 대신 호출). Beta 키는 시간당/하루 호출 수가 제한되어 있어서, 같은 검색어는 서버가 잠깐(검색 1분, 인기 5분) 캐시합니다. 보낼 수 있는 GIF는 GIPHY CDN 주소(`media*.giphy.com`)로만 제한됩니다.
 
 ### 메시지 영구 저장 (Turso)
 
@@ -122,8 +139,9 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 │   ├── present.js           #   서버 데이터를 "보는 사람 기준"으로 변환 (clientId 비노출)
 │   ├── emitters.js          #   방 전체/개인별 전송 헬퍼 (접속자 목록, 읽음 갱신 등)
 │   ├── rateLimiter.js       #   도배 방지 (이벤트별 제한)
-│   ├── validation.js        #   입력 검증
+│   ├── validation.js        #   입력 검증 (이미지 data URL, GIF 주소는 GIPHY CDN만)
 │   ├── routes.js            #   HTTP API (/api/config, /api/rooms, /avatar/:nickname)
+│   ├── gifs.js              #   GIF 검색 프록시 (/api/gifs — GIPHY 호출, 결과 캐시)
 │   ├── stickers.js          #   스티커 목록/이미지 서빙 (큰 이미지는 축소해서 캐시)
 │   ├── db/                  #   테이블별 DB 모듈 (client, schema, messages, reactions,
 │   │                        #   subscriptions, avatars)
@@ -133,8 +151,9 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 │   ├── index.html           # 채팅 화면 UI
 │   ├── style.css            # 스타일 (라이트/다크/IntelliJ/Excel 테마)
 │   ├── client.js            # 클라이언트 진입점 — js/ 모듈을 불러옴
-│   ├── js/                  # 기능별 ES 모듈 (login, messages, compose, avatar, reactions,
-│   │                        # reply, search, read, theme, notifications, lightbox, ...)
+│   ├── js/                  # 기능별 ES 모듈 (login, messages, compose, mention, gif, avatar,
+│   │                        # reactions, reply, search, read, lastSeen, unread, connection,
+│   │                        # theme, notifications, lightbox, ...)
 │   ├── package.json         # {"type":"module"} — 테스트에서 Node가 이 폴더를 ESM으로 읽게 함
 │   ├── manifest.json        # PWA 매니페스트
 │   ├── service-worker.js    # 백그라운드 푸시 수신용 Service Worker
@@ -185,6 +204,9 @@ Render 무료 플랜은 15분간 요청이 없으면 서버가 잠들고, 다음
 - `CHAT_PIN`을 설정하지 않으면 접속 주소를 아는 사람은 누구나 들어올 수 있습니다.
 - 사진 첨부는 용량 상한(base64 기준 약 700KB, 원본 500KB 정도)이 있고, 넘으면 거부됩니다. 서버 파일시스템이 아니라 DB에 저장되므로 무료 DB 용량을 고려한 제한입니다 — 7일 지나면 메시지와 함께 자동 삭제됩니다.
 - 방 목록은 "현재 접속자가 있는 방"과 "DB에 메시지 기록이 있는 방"만 보여줍니다. 방 이름을 URL 파라미터로 공유하는 방식은 그대로 유효합니다.
+- "안 읽은 메시지" 구분선의 기준(마지막으로 본 시각)은 그 브라우저의 localStorage에 방별로 저장되어, 다른 기기와는 공유되지 않습니다. 대화 기록을 불러오는 것이므로 DB가 있어야 동작합니다.
+- 닉네임 중복 방지는 "지금 접속 중인 사람" 기준이라, 나간 뒤에는 다른 사람이 그 닉네임을 쓸 수 있습니다 (프로필 사진이 닉네임 기준으로 공유되는 점은 아래 참고).
+- GIF 검색은 GIPHY 무료(Beta) 키의 호출 제한(시간당/하루)을 따릅니다. 제한을 넘으면 잠시 목록이 안 뜰 수 있습니다.
 - 읽음 표시는 "현재 방에 접속 중인 사람 기준"이라, 재시작하면 초기화됩니다(DB에 저장 안 함). 프로필 사진은 닉네임 기준으로 저장되어, 같은 닉네임을 쓰는 다른 사람과 공유됩니다.
 
 ## 라이선스
