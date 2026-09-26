@@ -12,7 +12,7 @@
 - "입력 중..." 표시
 - 커스텀 스티커 (`public/stickers/`에 이미지만 넣으면 자동으로 추가됨, 큰 이미지는 자동으로 축소)
 - 이모지 리액션 (메시지에 👍❤️😂 등으로 반응)
-- 본인이 보낸 메시지 삭제 / 텍스트 메시지 수정("(수정됨)" 표시)
+- 본인이 보낸 메시지 삭제 / 텍스트 메시지 수정 — ✏️를 누르면 말풍선 자리에서 바로 고침(Enter 저장·Esc 취소), 입력창이 빈 상태에서 ↑를 누르면 내 마지막 메시지 수정 시작("(수정됨)" 표시)
 - 답장 (원문을 인용해서 표시, 원문이 삭제돼도 인용은 남음)
 - @닉네임 멘션 — `@`를 치면 방 사람 목록 자동완성, 하이라이트 표시되고, 멘션되면 탭을 보고 있어도 우선 알림
 - 사진 첨부 — 📎 버튼, Ctrl+V 붙여넣기, 끌어다 놓기 모두 지원. 브라우저에서 리사이즈/압축 후 전송(서버 파일시스템에는 저장 안 함, 용량 상한 있음)
@@ -20,7 +20,9 @@
 - GIF 검색·전송 ([GIPHY](https://developers.giphy.com/), `GIPHY_API_KEY` 설정 시에만 GIF 버튼이 보임)
 - 안 읽은 메시지 구분선 — 다시 들어오면 마지막으로 본 곳 다음 메시지 앞에 "여기서부터 안 읽은 메시지" 표시
 - 같은 방에서 닉네임 중복 방지 (같은 브라우저의 재연결/다른 탭은 허용)
-- 메시지 링크 자동 하이퍼링크
+- 메시지 링크 자동 하이퍼링크 + 링크 미리보기 카드 (제목·설명·썸네일 — 서버가 대신 페이지를 열어 가져오므로 보는 사람 브라우저는 외부 사이트에 접속하지 않음)
+- 메시지 고정(📌) — 방 사람 누구나 고정/해제, 방마다 최대 10개. 대화 위쪽 바에 최근 고정을 보여주고(누르면 그 메시지로 이동) 펼치면 전체 목록. 고정한 메시지는 7일 자동 삭제에서 제외됨
+- 대화 내보내기(💾) — 방의 저장된 대화를 텍스트(.txt) 또는 JSON(.json) 파일로 저장 (사진은 "(사진)"으로만 표기)
 - 사진/GIF/스티커 클릭 시 확대해서 보기(라이트박스)
 - 답장 인용문 클릭하면 원본 메시지로 스크롤 이동
 - 이전 대화를 읽으려고 위로 스크롤하면 새 메시지가 와도 화면이 안 당겨지고, ⬇ 버튼으로 원할 때 맨 아래로 이동
@@ -142,18 +144,20 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 │   ├── validation.js        #   입력 검증 (이미지 data URL, GIF 주소는 GIPHY CDN만)
 │   ├── routes.js            #   HTTP API (/api/config, /api/rooms, /avatar/:nickname)
 │   ├── gifs.js              #   GIF 검색 프록시 (/api/gifs — GIPHY 호출, 결과 캐시)
+│   ├── linkPreview.js       #   링크 미리보기 (OpenGraph 파싱, 썸네일 변환, SSRF 방어)
+│   ├── pinStore.js          #   고정 메시지 저장소 (DB 또는 메모리 폴백)
 │   ├── stickers.js          #   스티커 목록/이미지 서빙 (큰 이미지는 축소해서 캐시)
 │   ├── db/                  #   테이블별 DB 모듈 (client, schema, messages, reactions,
 │   │                        #   subscriptions, avatars)
-│   └── handlers/            #   소켓 이벤트별 핸들러 (session, chat, reactions,
-│                            #   messageActions, history, avatar, presence, pushSubscription)
+│   └── handlers/            #   소켓 이벤트별 핸들러 (session, chat, reactions, messageActions,
+│                            #   history, pins, linkPreview, avatar, presence, pushSubscription)
 ├── public/
 │   ├── index.html           # 채팅 화면 UI
 │   ├── style.css            # 스타일 (라이트/다크/IntelliJ/Excel 테마)
 │   ├── client.js            # 클라이언트 진입점 — js/ 모듈을 불러옴
-│   ├── js/                  # 기능별 ES 모듈 (login, messages, compose, mention, gif, avatar,
-│   │                        # reactions, reply, search, read, lastSeen, unread, connection,
-│   │                        # theme, notifications, lightbox, ...)
+│   ├── js/                  # 기능별 ES 모듈 (login, messages, compose, mention, gif, pins,
+│   │                        # export, linkPreview, avatar, reactions, reply, search, read,
+│   │                        # lastSeen, unread, connection, theme, notifications, lightbox, ...)
 │   ├── package.json         # {"type":"module"} — 테스트에서 Node가 이 폴더를 ESM으로 읽게 함
 │   ├── manifest.json        # PWA 매니페스트
 │   ├── service-worker.js    # 백그라운드 푸시 수신용 Service Worker
@@ -176,9 +180,11 @@ Node 내장 테스트 러너(`node --test`)로 실행하며, 별도 서버나 DB
 | --- | --- |
 | `chat.test.js`, `chat-events.test.js` | 소켓 이벤트 전반 — 입장 정리, 메시지 검증(길이/스티커/사진/답장/멘션), 리액션, 삭제·수정 권한, 입력 중, 읽음 표시, 도배 방지 (메모리 모드) |
 | `http.test.js` | HTTP API, 스티커 서빙(경로 조작 차단), 프로필 사진 |
-| `chat-db.test.js` | DB 모드 통합 — 대화 기록 복원, 페이지네이션, 검색, 수정, 삭제, 7일 정리 (로컬 libSQL 파일 사용) |
+| `chat-db.test.js` | DB 모드 통합 — 대화 기록 복원, 페이지네이션, 검색, 수정, 삭제, 고정·내보내기, 7일 정리 (로컬 libSQL 파일 사용) |
 | `chat-pin.test.js` | `CHAT_PIN` 설정 서버 |
 | `nickname.test.js` | 같은 방 닉네임 중복 방지 |
+| `pins.test.js` | 메시지 고정/해제, 개수 상한, 삭제 시 함께 해제, 입장 시 목록 수신 (메모리 모드) |
+| `link-preview.test.js`, `link-preview-blocked.test.js` | 링크 미리보기 — 가짜 웹 서버로 파싱/썸네일/리다이렉트/캐시 검증, 기본 설정에서 내부망 주소 차단(SSRF) 검증 |
 | `gif.test.js`, `gif-disabled.test.js` | GIF 검색 프록시(가짜 GIPHY 서버), GIF 메시지 URL 검증, 키 미설정 시 503 |
 | `db.test.js`, `db-disabled.test.js` | `db.js` 단위 테스트(옛 스키마 마이그레이션 포함), DB 미설정 시 계약 |
 | `push*.test.js` | 푸시 구독/발송 — 메모리·DB 두 저장 경로에 같은 시나리오, VAPID 미설정/반쪽 설정 (`web-push`는 가짜로 대체) |
@@ -207,6 +213,8 @@ Render 무료 플랜은 15분간 요청이 없으면 서버가 잠들고, 다음
 - "안 읽은 메시지" 구분선의 기준(마지막으로 본 시각)은 그 브라우저의 localStorage에 방별로 저장되어, 다른 기기와는 공유되지 않습니다. 대화 기록을 불러오는 것이므로 DB가 있어야 동작합니다.
 - 닉네임 중복 방지는 "지금 접속 중인 사람" 기준이라, 나간 뒤에는 다른 사람이 그 닉네임을 쓸 수 있습니다 (프로필 사진이 닉네임 기준으로 공유되는 점은 아래 참고).
 - GIF 검색은 GIPHY 무료(Beta) 키의 호출 제한(시간당/하루)을 따릅니다. 제한을 넘으면 잠시 목록이 안 뜰 수 있습니다.
+- 링크 미리보기는 서버가 남의 주소를 대신 여는 기능이라 보안 제한이 있습니다: http/https 기본 포트만, 내부망/로컬/사설 IP는 거부(DNS 조회 결과와 리다이렉트까지 검사), 응답 크기·시간 제한. 로봇을 막거나 로그인이 필요한 사이트는 카드가 안 뜰 수 있고, 결과는 서버에 1시간 캐시됩니다.
+- 고정 메시지와 대화 내보내기 중 서버에 저장된 전체 기록을 쓰는 부분(내보내기, 고정 유지)은 DB가 있어야 완전하게 동작합니다. DB가 없으면 고정은 서버 재시작 시 사라지고, 내보내기는 이 브라우저에 남아 있는 대화만 저장합니다.
 - 읽음 표시는 "현재 방에 접속 중인 사람 기준"이라, 재시작하면 초기화됩니다(DB에 저장 안 함). 프로필 사진은 닉네임 기준으로 저장되어, 같은 닉네임을 쓰는 다른 사람과 공유됩니다.
 
 ## 라이선스

@@ -31,6 +31,8 @@ export const state = {
   pushSubscribed: false,
   roomUsers: [], // 방에 있는 사람들 닉네임 — @멘션 하이라이트를 판단할 때 씀
   pendingReplyTo: null, // 답장 중인 메시지 { id, nickname, preview }
+  pins: [], // 방의 고정 메시지 [{ id, type, preview, nickname, time, pinnedAt }] (최근 고정순)
+  pinnedIds: new Set(),
 };
 
 // 닉네임 -> 프로필 사진 버전(updatedAt). 캐시 무효화(cache-busting)용 —

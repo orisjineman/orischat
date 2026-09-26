@@ -409,3 +409,36 @@ test('load-until: 화면의 가장 오래된 메시지부터 찾는 시각까지
     }
   });
 });
+
+test('DB 모드: 고정은 재접속 후에도 남고, 수정하면 미리보기가 바뀌고, 내보내기는 저장된 대화를 준다', async () => {
+  const room = 'db-pins-export';
+  await withClients([{ nickname: 'pinner', room, clientId: 'pinner-id' }], async ([sock]) => {
+    const msg = await say(sock, '고정할 공지');
+    await say(sock, '보통 글');
+    const pinned = waitFor(sock, 'pins', (p) => p.length === 1);
+    sock.emit('pin-message', { messageId: msg.id });
+    assert.equal((await pinned)[0].preview, '고정할 공지');
+
+    const edited = waitFor(sock, 'pins', (p) => p.length === 1 && p[0].preview === '수정된 공지');
+    sock.emit('edit-message', { messageId: msg.id, content: '수정된 공지' });
+    await edited;
+
+    const exported = await new Promise((resolve) => sock.emit('export-messages', {}, resolve));
+    assert.equal(exported.available, true);
+    assert.equal(exported.truncated, false);
+    assert.deepEqual(exported.messages.map((m) => m.content), ['수정된 공지', '보통 글']);
+    assert.equal(exported.messages[0].edited, true);
+    assert.equal('clientId' in exported.messages[0], false);
+  });
+
+  // 접속을 끊었다 다시 들어와도 고정 목록이 온다 (서버 메모리가 아니라 DB에 있음)
+  const again = connectClient();
+  try {
+    const pins = waitFor(again, 'pins');
+    await join(again, { nickname: 'back', room, clientId: 'back-id' });
+    const list = await pins;
+    assert.deepEqual(list.map((p) => p.preview), ['수정된 공지']);
+  } finally {
+    await closeClient(again);
+  }
+});

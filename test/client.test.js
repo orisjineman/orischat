@@ -569,21 +569,90 @@ test('message-deleted가 오면 삭제 상태로 바뀌고 버튼/리액션이 �
   }
 });
 
-test('수정: 새 내용을 입력하면 edit-message가 나가고, 같거나 빈 내용이면 안 나간다', async () => {
-  const { $, dialogs, socket } = await bootJoined();
+test('수정: ✏️를 누르면 말풍선 자리에 편집창이 열리고, Enter로 저장하면 edit-message가 나간다', async () => {
+  const { $, socket, key } = await bootJoined();
   socket.trigger('chat-message', chatMsg({ mine: true }));
 
-  dialogs.promptResult = '  새 내용 ';
   $('.edit-btn').click();
-  assert.deepEqual(dialogs.prompts[0], { msg: '메시지 수정', def: '안녕' });
-  assert.deepEqual(socket.lastSent('edit-message').args[0], { messageId: 'm1', content: '새 내용' });
+  const input = $('.inline-edit-input');
+  assert.equal(input.value, '안녕');
+  assert.equal($('.msg-body').hidden, true);
+  assert.ok($('.msg').classList.contains('editing'));
 
-  const before = socket.sent('edit-message').length;
-  for (const value of [null, '   ', '안녕']) {
-    dialogs.promptResult = value;
+  input.value = '  새 내용 ';
+  key(input, 'Enter');
+  assert.deepEqual(socket.lastSent('edit-message').args[0], { messageId: 'm1', content: '새 내용' });
+  assert.equal($('.inline-edit'), null); // 저장하면 편집창이 닫힘
+  assert.equal($('.msg-body').hidden, false);
+});
+
+test('수정: 저장 버튼도 되고, Esc/취소/같은 내용/빈 내용은 전송하지 않는다', async () => {
+  const { $, socket, key } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ mine: true }));
+
+  $('.edit-btn').click();
+  $('.inline-edit-input').value = '저장 버튼으로';
+  $('.inline-edit-save').click();
+  assert.equal(socket.sent('edit-message').length, 1);
+
+  const cancelled = [
+    () => key($('.inline-edit-input'), 'Escape'),
+    () => $('.inline-edit-cancel').click(),
+    () => { $('.inline-edit-input').value = '안녕'; key($('.inline-edit-input'), 'Enter'); },
+    () => { $('.inline-edit-input').value = '   '; key($('.inline-edit-input'), 'Enter'); },
+  ];
+  for (const act of cancelled) {
     $('.edit-btn').click();
+    act();
+    assert.equal($('.inline-edit'), null);
   }
-  assert.equal(socket.sent('edit-message').length, before);
+  assert.equal(socket.sent('edit-message').length, 1);
+});
+
+test('수정: 한글 조합 중 Enter는 저장하지 않고, 편집창은 한 번에 하나만 열린다', async () => {
+  const { $, $$, socket, window } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'a', mine: true }));
+  socket.trigger('chat-message', chatMsg({ id: 'b', mine: true, content: '둘째' }));
+  $$('.edit-btn')[0].click();
+  const ev = new window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true });
+  $('.inline-edit-input').dispatchEvent(ev);
+  assert.equal(socket.sent('edit-message').length, 0);
+  assert.ok($('.inline-edit'));
+
+  $$('.edit-btn')[1].click();
+  assert.equal($$('.inline-edit').length, 1);
+  assert.equal($('.inline-edit-input').value, '둘째');
+});
+
+test('수정 중에 수정 결과/삭제가 오면 편집창이 닫힌다', async () => {
+  const { $, socket } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ mine: true }));
+  $('.edit-btn').click();
+  socket.trigger('message-edited', { messageId: 'm1', content: '다른 곳에서 수정', editedAt: 1 });
+  assert.equal($('.inline-edit'), null);
+  assert.equal($('.msg-body').textContent, '다른 곳에서 수정');
+
+  $('.edit-btn').click();
+  socket.trigger('message-deleted', { messageId: 'm1' });
+  assert.equal($('.inline-edit'), null);
+  assert.equal($('.msg-body').textContent, '삭제된 메시지입니다');
+});
+
+test('입력창이 비어 있을 때 ↑를 누르면 내 마지막 텍스트 메시지 수정이 시작된다', async () => {
+  const { $, socket, key } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'first', mine: true, content: '첫째' }));
+  socket.trigger('chat-message', chatMsg({ id: 'other', content: '남의 글' }));
+  socket.trigger('chat-message', chatMsg({ id: 'last', mine: true, content: '마지막 내 글' }));
+  socket.trigger('chat-message', chatMsg({ id: 'sticker', mine: true, type: 'sticker', content: 'a.png' }));
+
+  const input = $('#message-input');
+  input.value = '쓰는 중';
+  key(input, 'ArrowUp');
+  assert.equal($('.inline-edit'), null); // 글이 있으면 그냥 커서 이동
+
+  input.value = '';
+  key(input, 'ArrowUp');
+  assert.equal($('.inline-edit-input').value, '마지막 내 글'); // 스티커는 건너뜀
 });
 
 test('message-edited가 오면 본문이 바뀌고 (수정됨)이 한 번만 붙는다', async () => {
@@ -1215,4 +1284,318 @@ test('위를 읽던 중이어도 내가 보낸 메시지는 맨 아래로 따라
   socket.trigger('chat-message', chatMsg({ id: 'me1', mine: true }));
   assert.equal(messages.scrollTop, 3000);
   assert.ok($('#scroll-bottom-count').classList.contains('hidden'));
+});
+
+// ---------------------------------------------------------------- 고정 / 내보내기 / 링크 미리보기
+
+const pinItem = (over = {}) => ({ id: 'm1', type: 'text', preview: '고정된 공지', nickname: '철수', time: 1700000000000, pinnedAt: 2, ...over });
+
+test('고정 목록을 받으면 바에 가장 최근 고정이 보이고, 없으면 바가 숨겨진다', async () => {
+  const { socket, $ } = await bootJoined();
+  assert.ok($('#pin-bar').classList.contains('hidden'));
+  socket.trigger('pins', [pinItem({ id: 'b', preview: '두번째', pinnedAt: 9 }), pinItem({ id: 'a', preview: '첫번째', pinnedAt: 1 })]);
+  assert.ok(!$('#pin-bar').classList.contains('hidden'));
+  assert.equal($('#pin-bar-main').textContent, '철수: 두번째');
+  assert.equal($('#pin-bar-toggle').textContent, '2개 ▾');
+  socket.trigger('pins', []);
+  assert.ok($('#pin-bar').classList.contains('hidden'));
+});
+
+test('고정 바를 누르면 그 메시지로 이동하고, 펼치면 목록에서 이동/해제할 수 있다', async () => {
+  const { socket, $, $$ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'a', content: '첫 공지' }));
+  socket.trigger('chat-message', chatMsg({ id: 'b', content: '둘째 공지' }));
+  socket.trigger('pins', [pinItem({ id: 'b', preview: '둘째 공지' }), pinItem({ id: 'a', preview: '첫 공지' })]);
+
+  $('#pin-bar-main').click();
+  assert.ok($('[data-message-id="b"]').classList.contains('flash-highlight'));
+
+  assert.ok($('#pin-list').classList.contains('hidden'));
+  $('#pin-bar-toggle').click();
+  assert.ok(!$('#pin-list').classList.contains('hidden'));
+  assert.equal($('#pin-bar-toggle').textContent, '2개 ▴');
+  assert.equal($$('.pin-row').length, 2);
+
+  $$('.pin-row-main')[1].click();
+  assert.ok($('[data-message-id="a"]').classList.contains('flash-highlight'));
+
+  $$('.pin-row-unpin')[1].click();
+  assert.deepEqual(socket.lastSent('unpin-message').args[0], { messageId: 'a' });
+});
+
+test('말풍선의 📌 버튼: 고정 안 된 건 pin-message, 고정된 건 unpin-message를 보내고 고정된 메시지엔 pinned 표시가 붙는다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'a' }));
+  socket.trigger('chat-message', chatMsg({ id: 'b' }));
+  socket.trigger('pins', [pinItem({ id: 'b' })]);
+  assert.ok(!$('[data-message-id="a"]').classList.contains('pinned'));
+  assert.ok($('[data-message-id="b"]').classList.contains('pinned'));
+
+  $('[data-message-id="a"] .pin-btn').click();
+  assert.deepEqual(socket.lastSent('pin-message').args[0], { messageId: 'a' });
+  $('[data-message-id="b"] .pin-btn').click();
+  assert.deepEqual(socket.lastSent('unpin-message').args[0], { messageId: 'b' });
+
+  socket.trigger('pins', []); // 해제되면 표시도 사라짐
+  assert.ok(!$('[data-message-id="b"]').classList.contains('pinned'));
+});
+
+test('고정 목록이 대화 기록보다 먼저 도착해도 나중에 그려진 메시지에 pinned 표시가 붙는다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('pins', [pinItem({ id: 'h1' })]);
+  socket.trigger('history', [chatMsg({ id: 'h1' }), chatMsg({ id: 'h2', time: 1700000000100 })]);
+  assert.ok($('[data-message-id="h1"]').classList.contains('pinned'));
+  assert.ok(!$('[data-message-id="h2"]').classList.contains('pinned'));
+});
+
+test('삭제된 메시지에는 📌 버튼이 없고, pin-error는 토스트로 알려준다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'd', deleted: true }));
+  assert.equal($('.pin-btn'), null);
+  socket.trigger('pin-error', '고정은 방마다 최대 10개까지 할 수 있어요.');
+  assert.equal($('#rate-limit-toast').textContent, '고정은 방마다 최대 10개까지 할 수 있어요.');
+  assert.ok($('#rate-limit-toast').classList.contains('show'));
+});
+
+// ---- 링크 미리보기
+
+const preview = (over = {}) => ({ url: 'https://ex.com/a', title: '예시 제목', description: '예시 설명', siteName: 'ex.com', image: null, ...over });
+
+test('링크가 있는 메시지에는 서버가 준 미리보기 카드가 붙는다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ content: '이거 봐 https://ex.com/a 재밌어' }));
+  const req = socket.lastSent('link-preview');
+  assert.deepEqual(req.args[0], { url: 'https://ex.com/a' });
+  req.args[1](preview({ image: 'data:image/jpeg;base64,AAAA' }));
+  await tick();
+  const card = $('.link-card');
+  assert.equal(card.href, 'https://ex.com/a');
+  assert.equal(card.target, '_blank');
+  assert.equal(card.rel, 'noopener noreferrer');
+  assert.equal($('.link-card-title').textContent, '예시 제목');
+  assert.equal($('.link-card-desc').textContent, '예시 설명');
+  assert.equal($('.link-card-site').textContent, 'ex.com');
+  assert.equal($('.link-card-thumb').src, 'data:image/jpeg;base64,AAAA');
+});
+
+test('미리보기 내용은 HTML로 해석되지 않고, JPEG data URL이 아닌 이미지는 무시한다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ content: 'https://ex.com/evil' }));
+  socket.lastSent('link-preview').args[1](preview({ title: '<img src=x onerror=alert(1)>', image: 'https://tracker.example/pixel.gif' }));
+  await tick();
+  assert.equal($('.link-card-title').textContent, '<img src=x onerror=alert(1)>');
+  assert.equal($('.link-card img.link-card-thumb'), null);
+  assert.equal($('.link-card-title img'), null);
+});
+
+test('링크가 없으면 요청하지 않고, 미리보기가 없다(false)면 카드도 없다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ content: '링크 없는 글' }));
+  assert.equal(socket.sent('link-preview').length, 0);
+  socket.trigger('chat-message', chatMsg({ id: 'm2', content: 'https://ex.com/none' }));
+  socket.lastSent('link-preview').args[1](false);
+  await tick();
+  assert.equal($('.link-card'), null);
+});
+
+test('문장부호가 붙은 링크는 떼고 요청하고, 스티커/삭제된 메시지는 요청하지 않는다', async () => {
+  const { socket } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ content: '(https://ex.com/a).' }));
+  assert.deepEqual(socket.lastSent('link-preview').args[0], { url: 'https://ex.com/a' });
+  const before = socket.sent('link-preview').length;
+  socket.trigger('chat-message', chatMsg({ id: 's', type: 'sticker', content: 'https://ex.com/s.png' }));
+  socket.trigger('chat-message', chatMsg({ id: 'd', deleted: true, content: 'https://ex.com/d' }));
+  assert.equal(socket.sent('link-preview').length, before);
+});
+
+test('같은 링크는 한 번만 요청하고(캐시), 동시 요청은 2개까지만 보낸다', async () => {
+  const { socket, $$ } = await bootJoined();
+  for (let i = 0; i < 4; i++) socket.trigger('chat-message', chatMsg({ id: `u${i}`, content: `https://ex.com/page${i}` }));
+  assert.equal(socket.sent('link-preview').length, 2); // 나머지는 대기
+  socket.sent('link-preview')[0].args[1](preview({ title: 'P0' }));
+  assert.equal(socket.sent('link-preview').length, 3); // 하나 끝나면 다음 요청
+  socket.sent('link-preview').forEach((r) => r.args[1](preview()));
+  await tick();
+
+  socket.trigger('chat-message', chatMsg({ id: 'again', content: 'https://ex.com/page0' }));
+  await tick();
+  assert.equal(socket.sent('link-preview').filter((r) => r.args[0].url === 'https://ex.com/page0').length, 1);
+  assert.ok($$('.link-card').length >= 1);
+});
+
+test('입장 전에 렌더된 메시지는 입장이 끝난 뒤에 요청한다 / 서버가 거절(null)하면 카드 없이 넘어가고 나중에 다시 시도할 수 있다', async () => {
+  const env = await boot({ session: { 'orischat-nickname': '나' } });
+  const { socket, $ } = env;
+  socket.trigger('chat-message', chatMsg({ content: 'https://ex.com/late' }));
+  assert.equal(socket.sent('link-preview').length, 0);
+  socket.trigger('joined', { nickname: '나', room: 'general' });
+  await new Promise((r) => setTimeout(r, 20));
+  const req = socket.lastSent('link-preview');
+  assert.ok(req);
+  req.args[1](null); // 거절 — 캐시하지 않음
+  await tick();
+  assert.equal($('.link-card'), null);
+  socket.trigger('chat-message', chatMsg({ id: 'retry', content: 'https://ex.com/late' }));
+  assert.equal(socket.sent('link-preview').length, 2);
+});
+
+test('링크를 바꿔서 수정하면 카드도 새 링크로 바뀐다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ mine: true, content: 'https://ex.com/old' }));
+  socket.lastSent('link-preview').args[1](preview({ title: '옛 제목' }));
+  await tick();
+  assert.equal($('.link-card-title').textContent, '옛 제목');
+
+  socket.trigger('message-edited', { messageId: 'm1', content: '링크 뺐어요', editedAt: 1 });
+  assert.equal($('.link-card'), null);
+  socket.trigger('message-edited', { messageId: 'm1', content: 'https://ex.com/new', editedAt: 2 });
+  socket.lastSent('link-preview').args[1](preview({ title: '새 제목' }));
+  await tick();
+  assert.equal($('.link-card-title').textContent, '새 제목');
+});
+
+test('삭제하면 카드도 사라진다', async () => {
+  const { socket, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ mine: true, content: 'https://ex.com/a' }));
+  socket.lastSent('link-preview').args[1](preview());
+  await tick();
+  assert.ok($('.link-card'));
+  socket.trigger('message-deleted', { messageId: 'm1' });
+  assert.equal($('.link-card'), null);
+});
+
+// ---- 내보내기
+
+async function loadExportFormat() {
+  return import(pathToFileURL(path.join(PUBLIC_DIR, 'js', 'exportFormat.js')).href);
+}
+
+test('내보내기 텍스트: 날짜 구분/답장/수정/스티커·사진·GIF 표기', async () => {
+  const { formatExportText } = await loadExportFormat();
+  const t1 = new Date(2026, 8, 24, 22, 12).getTime();
+  const t2 = new Date(2026, 8, 25, 9, 5).getTime();
+  const out = formatExportText({
+    room: 'ux',
+    exportedAt: t2,
+    truncated: true,
+    messages: [
+      { type: 'text', content: '안녕하세요', nickname: '철수', time: t1 },
+      { type: 'image', content: '', nickname: '영희', time: t1 + 1000 },
+      { type: 'sticker', content: 'a.png', nickname: '영희', time: t1 + 2000 },
+      { type: 'gif', content: 'https://media1.giphy.com/media/x/200w.gif', nickname: '철수', time: t2 },
+      { type: 'text', content: '수정한 글', nickname: '철수', time: t2 + 60000, edited: true, replyTo: { nickname: '영희', preview: '원문' } },
+    ],
+  });
+  assert.match(out, /방: ux/);
+  assert.match(out, /메시지 5개 \(오래된 메시지 일부는 포함되지 않았어요\)/);
+  assert.equal((out.match(/^── .+ ──$/gm) || []).length, 2); // 날짜가 바뀌는 곳마다 구분선
+  assert.match(out, /\] 철수: 안녕하세요\n/);
+  assert.match(out, /\] 영희: \(사진\)\n/);
+  assert.match(out, /\] 영희: \(스티커\)\n/);
+  assert.match(out, /\] 철수: \(GIF\) https:\/\/media1\.giphy\.com\/media\/x\/200w\.gif\n/);
+  assert.match(out, /↳ 영희에게 답장: 원문\n\[[^\]]+\] 철수: 수정한 글 \(수정됨\)/);
+});
+
+test('내보내기 JSON: 사진 본문은 null, 식별자 없음 / 파일 이름은 안전한 문자만', async () => {
+  const { formatExportJson, exportFilename } = await loadExportFormat();
+  const data = JSON.parse(
+    formatExportJson({
+      room: 'ux',
+      exportedAt: 0,
+      messages: [
+        { id: 'a', type: 'text', content: '글', nickname: '철수', time: 1700000000000 },
+        { id: 'b', type: 'image', content: 'data:image/png;base64,AAAA', nickname: '영희', time: 1700000001000, edited: 0 },
+      ],
+    })
+  );
+  assert.equal(data.count, 2);
+  assert.equal(data.messages[1].content, null);
+  assert.equal(data.messages[0].date, new Date(1700000000000).toISOString());
+  assert.equal(data.messages[0].edited, false);
+  assert.equal(exportFilename('내 방/이름: 1?', 'txt', new Date(2026, 8, 5, 7, 3)), 'orischat-내_방_이름_1_-20260905-0703.txt');
+});
+
+// 파일 저장(Blob 다운로드)을 가로채서 내용을 확인함
+function captureDownloads(window) {
+  const saved = [];
+  const original = globalThis.URL.createObjectURL;
+  globalThis.URL.createObjectURL = (blob) => {
+    saved.push({ blob });
+    return 'blob:test';
+  };
+  window.HTMLAnchorElement.prototype.click = function click() {
+    saved[saved.length - 1].filename = this.download;
+  };
+  return { saved, restore: () => (globalThis.URL.createObjectURL = original) };
+}
+
+test('💾 버튼 → 형식 선택 → 서버의 전체 대화를 받아 파일로 저장한다', async () => {
+  const { socket, window, $ } = await bootJoined();
+  const dl = captureDownloads(window);
+  try {
+    assert.ok($('#export-picker').classList.contains('hidden'));
+    $('#export-btn').click();
+    assert.ok(!$('#export-picker').classList.contains('hidden'));
+    $('#export-picker [data-format="txt"]').click();
+    assert.ok($('#export-picker').classList.contains('hidden'));
+
+    const req = socket.lastSent('export-messages');
+    req.args[1]({ available: true, truncated: false, messages: [{ id: 'a', type: 'text', content: '저장될 글', nickname: '철수', time: 1700000000000 }] });
+    await tick();
+    assert.equal(dl.saved.length, 1);
+    assert.match(dl.saved[0].filename, /^orischat-general-\d{8}-\d{4}\.txt$/);
+    const text = await dl.saved[0].blob.text();
+    assert.match(text, /철수: 저장될 글/);
+    const bytes = new Uint8Array(await dl.saved[0].blob.arrayBuffer());
+    assert.deepEqual(Array.from(bytes.slice(0, 3)), [0xef, 0xbb, 0xbf]); // 메모장 등에서 한글이 안 깨지게 UTF-8 BOM
+    assert.equal($('#rate-limit-toast').textContent, '메시지 1개를 저장했어요');
+  } finally {
+    dl.restore();
+  }
+});
+
+test('JSON 형식으로도 저장된다', async () => {
+  const { socket, window, $ } = await bootJoined();
+  const dl = captureDownloads(window);
+  try {
+    $('#export-btn').click();
+    $('#export-picker [data-format="json"]').click();
+    socket.lastSent('export-messages').args[1]({ available: true, truncated: false, messages: [{ id: 'a', type: 'text', content: '글', nickname: '철수', time: 1700000000000 }] });
+    await tick();
+    assert.match(dl.saved[0].filename, /\.json$/);
+    assert.equal(JSON.parse(await dl.saved[0].blob.text()).messages[0].content, '글');
+  } finally {
+    dl.restore();
+  }
+});
+
+test('서버에 저장된 기록이 없으면(DB 없음) 이 브라우저에 남은 대화만 저장하고 그렇게 안내한다', async () => {
+  const { socket, window, $ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'local', content: '화면에 있던 글' }));
+  const dl = captureDownloads(window);
+  try {
+    $('#export-btn').click();
+    $('#export-picker [data-format="txt"]').click();
+    socket.lastSent('export-messages').args[1]({ available: false, truncated: false, messages: [] });
+    await tick();
+    assert.match(await dl.saved[0].blob.text(), /화면에 있던 글/);
+    assert.match($('#rate-limit-toast').textContent, /이 화면에 남은 1개만/);
+  } finally {
+    dl.restore();
+  }
+});
+
+test('내보낼 메시지가 하나도 없으면 파일을 만들지 않고 안내한다', async () => {
+  const { socket, window, $ } = await bootJoined();
+  const dl = captureDownloads(window);
+  try {
+    $('#export-btn').click();
+    $('#export-picker [data-format="txt"]').click();
+    socket.lastSent('export-messages').args[1]({ available: false, truncated: false, messages: [] });
+    await tick();
+    assert.equal(dl.saved.length, 0);
+    assert.equal($('#rate-limit-toast').textContent, '내보낼 메시지가 없어요');
+  } finally {
+    dl.restore();
+  }
 });

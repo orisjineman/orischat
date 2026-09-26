@@ -14,5 +14,7 @@ import './js/messages.js';
 import './js/compose.js';
 import './js/mention.js';
 import './js/gif.js';
+import './js/pins.js';
+import './js/export.js';
 import './js/search.js';
 import './js/login.js';

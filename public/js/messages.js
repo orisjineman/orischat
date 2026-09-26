@@ -4,6 +4,7 @@ import { getLastSeen } from './lastSeen.js';
 import { clearHistory, loadHistory, saveToHistory, updateHistoryEntry } from './historyStore.js';
 import { createAvatarEl } from './avatar.js';
 import { openLightbox } from './lightbox.js';
+import { attachLinkPreview } from './linkPreview.js';
 import { showToast } from './toast.js';
 import { maybeNotify } from './notifications.js';
 import { maybeMarkRead } from './read.js';
@@ -28,6 +29,7 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
 
   div.className = `msg ${mine ? 'me' : 'other'} ${kind === 'sticker' || kind === 'image' || kind === 'gif' ? 'sticker' : ''}`;
   if (id) div.dataset.messageId = id;
+  if (id && state.pinnedIds.has(id)) div.classList.add('pinned');
   if (time) div.dataset.time = time;
 
   const replyHtml = replyTo
@@ -45,6 +47,7 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
       ${id && !deleted ? '<button type="button" class="reply-btn" aria-label="답장">↩</button>' : ''}
       ${id && !deleted ? '<button type="button" class="react-btn" aria-label="반응 추가">🙂</button>' : ''}
       ${id && kind === 'text' && !deleted ? '<button type="button" class="copy-btn" aria-label="복사">📋</button>' : ''}
+      ${id && !deleted ? '<button type="button" class="pin-btn" aria-label="고정/해제" title="고정/해제">📌</button>' : ''}
       ${id && mine && kind === 'text' && !deleted ? '<button type="button" class="edit-btn" aria-label="수정">✏️</button>' : ''}
       ${id && mine && !deleted ? '<button type="button" class="delete-btn" aria-label="삭제">🗑</button>' : ''}
     </div>
@@ -83,6 +86,7 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
     body.appendChild(img);
   } else {
     renderLinkedText(body, text, state.roomUsers);
+    attachLinkPreview(div, text);
   }
 
   if (reactions && !deleted) {
@@ -92,13 +96,83 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
   return div;
 }
 
+// --- 인라인 수정: 말풍선 자리에서 바로 고침 (Enter 저장 / Esc 취소) ---
+export function endInlineEdit(msgEl) {
+  const editor = msgEl.querySelector('.inline-edit');
+  if (!editor) return;
+  editor.remove();
+  const body = msgEl.querySelector('.msg-body');
+  if (body) body.hidden = false;
+  msgEl.classList.remove('editing');
+}
+
+export function startInlineEdit(msgEl) {
+  const body = msgEl && msgEl.querySelector('.msg-body');
+  if (!body || msgEl.classList.contains('deleted') || msgEl.querySelector('.inline-edit')) return;
+  messagesEl.querySelectorAll('.msg.editing').forEach(endInlineEdit); // 한 번에 하나만
+
+  const original = body.textContent;
+  const editor = document.createElement('div');
+  editor.className = 'inline-edit';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'inline-edit-input';
+  input.maxLength = 500;
+  input.value = original;
+  input.setAttribute('aria-label', '메시지 수정');
+
+  const actions = document.createElement('div');
+  actions.className = 'inline-edit-actions';
+  const hint = document.createElement('span');
+  hint.className = 'inline-edit-hint';
+  hint.textContent = 'Enter 저장 · Esc 취소';
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'inline-edit-save';
+  saveBtn.textContent = '저장';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.className = 'inline-edit-cancel';
+  cancelBtn.textContent = '취소';
+  actions.append(hint, cancelBtn, saveBtn);
+  editor.append(input, actions);
+
+  const save = () => {
+    const value = input.value.trim();
+    endInlineEdit(msgEl);
+    if (value && value !== original) socket.emit('edit-message', { messageId: msgEl.dataset.messageId, content: value });
+  };
+  saveBtn.addEventListener('click', save);
+  cancelBtn.addEventListener('click', () => endInlineEdit(msgEl));
+  input.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return; // 한글 조합 중 Enter는 조합 확정
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      save();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      endInlineEdit(msgEl);
+    }
+  });
+
+  body.hidden = true;
+  body.after(editor);
+  msgEl.classList.add('editing');
+  msgEl.classList.remove('actions-open');
+  msgEl.scrollIntoView({ block: 'nearest' });
+  input.focus();
+  input.setSelectionRange(original.length, original.length);
+}
+
 function applyDeletedState(msgEl) {
   msgEl.classList.add('deleted');
   const body = msgEl.querySelector('.msg-body');
   if (body) body.textContent = '삭제된 메시지입니다';
   const reactionsEl = msgEl.querySelector('.msg-reactions');
   if (reactionsEl) reactionsEl.innerHTML = '';
-  ['.react-btn', '.delete-btn', '.reply-btn', '.edit-btn', '.copy-btn'].forEach((sel) => {
+  endInlineEdit(msgEl);
+  msgEl.querySelector('.link-card')?.remove();
+  ['.react-btn', '.delete-btn', '.reply-btn', '.edit-btn', '.copy-btn', '.pin-btn'].forEach((sel) => {
     const el = msgEl.querySelector(sel);
     if (el) el.remove();
   });
@@ -301,12 +375,14 @@ messagesEl.addEventListener('click', (e) => {
 
   const editBtn = e.target.closest('.edit-btn');
   if (editBtn) {
-    const msgEl = editBtn.closest('.msg');
-    const body = msgEl.querySelector('.msg-body');
-    const newText = prompt('메시지 수정', body ? body.textContent : '');
-    if (newText != null && newText.trim() && newText.trim() !== (body ? body.textContent : '')) {
-      socket.emit('edit-message', { messageId: msgEl.dataset.messageId, content: newText.trim() });
-    }
+    startInlineEdit(editBtn.closest('.msg'));
+    return;
+  }
+
+  const pinBtn = e.target.closest('.pin-btn');
+  if (pinBtn) {
+    const msgEl = pinBtn.closest('.msg');
+    socket.emit(msgEl.classList.contains('pinned') ? 'unpin-message' : 'pin-message', { messageId: msgEl.dataset.messageId });
     return;
   }
 
@@ -327,7 +403,7 @@ messagesEl.addEventListener('click', (e) => {
   }
 
   // 그 밖에 말풍선을 탭하면 액션 버튼(답장/반응/복사...)을 펼치거나 접음 (터치 기기용)
-  if (e.target.closest('a, .avatar-clickable')) return;
+  if (e.target.closest('a, .avatar-clickable, .inline-edit')) return;
   const tapped = e.target.closest('.msg:not(.system)');
   messagesEl.querySelectorAll('.msg.actions-open').forEach((el) => {
     if (el !== tapped) el.classList.remove('actions-open');
@@ -366,7 +442,7 @@ function cancelLongPress() {
 
 messagesEl.addEventListener('touchstart', (e) => {
   const msgEl = e.target.closest('.msg:not(.system):not(.deleted)');
-  if (!msgEl || !msgEl.dataset.messageId || e.target.closest('button, a, img')) return;
+  if (!msgEl || !msgEl.dataset.messageId || e.target.closest('button, a, img, input')) return;
   cancelLongPress();
   longPressTimer = setTimeout(() => {
     longPressTimer = null;
@@ -465,7 +541,9 @@ socket.on('typing', ({ nickname, isTyping }) => {
 socket.on('message-edited', ({ messageId, content, editedAt }) => {
   const msgEl = findMessageEl(messageId);
   if (msgEl) {
+    endInlineEdit(msgEl);
     renderLinkedText(msgEl.querySelector('.msg-body'), content, state.roomUsers);
+    attachLinkPreview(msgEl, content);
     const timeEl = msgEl.querySelector('.msg-time');
     if (timeEl && !timeEl.textContent.includes('(수정됨)')) timeEl.textContent += ' (수정됨)';
   }

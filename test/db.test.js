@@ -337,3 +337,68 @@ test('프로필 사진: 없으면 null, 저장하면 조회되고, 다시 저장
   assert.equal((await db.getAvatar('avatar-user')).image, 'data:image/png;base64,BBBB');
   assert.equal(await db.getAvatar('avatar-other'), null, '닉네임별로 분리');
 });
+
+// ---------------------------------------------------------------- 고정 메시지 / 내보내기
+
+const pin = (id, over = {}) => ({ id, type: 'text', preview: `미리보기 ${id}`, nickname: 'nick', time: Date.now(), pinnedAt: Date.now(), ...over });
+
+test('고정: 추가/중복/개수 상한/최근 고정순 목록/해제', async () => {
+  const room = 'pins-unit';
+  assert.equal(await db.addPin(room, pin('p1', { pinnedAt: 1000 }), 2), 'ok');
+  assert.equal(await db.addPin(room, pin('p1'), 2), 'exists');
+  assert.equal(await db.addPin(room, pin('p2', { pinnedAt: 2000 }), 2), 'ok');
+  assert.equal(await db.addPin(room, pin('p3'), 2), 'full');
+  assert.deepEqual((await db.listPins(room)).map((p) => p.id), ['p2', 'p1']); // 최근에 고정한 것부터
+  assert.deepEqual(await db.listPins('다른방'), []);
+
+  assert.equal(await db.removePin('다른방', 'p1'), false); // 다른 방에서는 못 풂
+  assert.equal(await db.removePin(room, 'p1'), true);
+  assert.equal(await db.removePin(room, 'p1'), false);
+  assert.deepEqual((await db.listPins(room)).map((p) => p.id), ['p2']);
+});
+
+test('updatePinPreview: 고정된 메시지면 갱신하고 true, 아니면 false', async () => {
+  await db.addPin('pins-upd', pin('u1'), 5);
+  assert.equal(await db.updatePinPreview('u1', '바뀐 글'), true);
+  assert.equal((await db.listPins('pins-upd'))[0].preview, '바뀐 글');
+  assert.equal(await db.updatePinPreview('nope', 'x'), false);
+});
+
+test('cleanupOldMessages: 고정된 메시지는 7일이 지나도 지우지 않는다', async () => {
+  const room = 'pins-cleanup';
+  const old = Date.now() - 8 * DAY;
+  const keep = msg({ room, time: old });
+  const drop = msg({ room, time: old + 1 });
+  await db.insertMessage(keep);
+  await db.insertMessage(drop);
+  await db.addPin(room, pin(keep.id), 5);
+  await db.cleanupOldMessages();
+  const left = (await db.getRecentMessages(room, 10)).map((m) => m.id);
+  assert.deepEqual(left, [keep.id]);
+});
+
+test('getMessageById: 있으면 방 정보와 함께, 없으면 null', async () => {
+  const m = msg({ room: 'by-id' });
+  await db.insertMessage(m);
+  const found = await db.getMessageById(m.id);
+  assert.equal(found.room, 'by-id');
+  assert.equal(found.content, m.content);
+  assert.equal(await db.getMessageById('없는-id'), null);
+});
+
+test('getMessagesForExport: 시간순, 사진 본문/식별자/리액션 제외, 답장·수정 정보 포함, limit은 최근 쪽 기준', async () => {
+  const room = 'export-unit';
+  const base = Date.now() - 10_000;
+  await db.insertMessage(msg({ room, content: '첫째', time: base }));
+  await db.insertMessage(msg({ room, type: 'image', content: 'data:image/png;base64,AAAA', time: base + 1 }));
+  const third = msg({ room, content: '셋째', time: base + 2, replyTo: { id: 'x', nickname: '철수', preview: '원문' } });
+  await db.insertMessage(third);
+  await db.editMessage(third.id, third.clientId, '셋째(수정)');
+
+  const rows = await db.getMessagesForExport(room, 10);
+  assert.deepEqual(rows.map((r) => r.content), ['첫째', '', '셋째(수정)']);
+  assert.equal('clientId' in rows[0], false);
+  assert.equal(rows[2].edited, true);
+  assert.deepEqual(rows[2].replyTo, { id: 'x', nickname: '철수', preview: '원문' });
+  assert.deepEqual((await db.getMessagesForExport(room, 2)).map((r) => r.content), ['', '셋째(수정)']);
+});

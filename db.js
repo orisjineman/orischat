@@ -12,4 +12,5 @@ module.exports = {
   toggleReaction: require('./lib/db/reactions').toggleReaction,
   ...require('./lib/db/subscriptions'),
   ...require('./lib/db/avatars'),
+  ...require('./lib/db/pins'),
 };

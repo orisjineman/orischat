@@ -43,6 +43,7 @@
           <input id="avatar-file-input" type="file" accept="image/*" class="hidden" />
           <button type="button" id="search-btn" aria-label="검색">🔍</button>
           <button type="button" id="notify-btn" aria-label="알림 켜기">🔕 알림 켜기</button>
+          <button type="button" id="export-btn" aria-label="대화 내보내기">💾</button>
           <button type="button" id="theme-toggle-btn" aria-label="테마 선택">🌓</button>
         </div>
       </header>
@@ -63,6 +64,12 @@
           <span class="active">ChatRoom.kt</span><span>MessageHandler.kt</span>
         </div>
       </div>
+      <div id="pin-bar" class="hidden">
+        <span class="pin-bar-icon" aria-hidden="true">📌</span>
+        <button type="button" id="pin-bar-main" title="고정된 메시지로 이동"></button>
+        <button type="button" id="pin-bar-toggle" aria-label="고정 메시지 목록"></button>
+      </div>
+      <div id="pin-list" class="hidden"></div>
       <div id="search-panel" class="hidden">
         <form id="search-form">
           <input id="search-input" type="text" placeholder="메시지 검색" autocomplete="off" />

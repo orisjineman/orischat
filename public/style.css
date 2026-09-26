@@ -872,6 +872,7 @@ body {
 .reply-btn,
 .edit-btn,
 .copy-btn,
+.pin-btn,
 .delete-btn {
   border: none;
   background: none;
@@ -889,18 +890,27 @@ body {
 .msg:hover .reply-btn,
 .msg:hover .edit-btn,
 .msg:hover .copy-btn,
+.msg:hover .pin-btn,
 .msg:hover .delete-btn,
 .msg.actions-open .react-btn,
 .msg.actions-open .reply-btn,
 .msg.actions-open .edit-btn,
 .msg.actions-open .copy-btn,
+.msg.actions-open .pin-btn,
 .msg.actions-open .delete-btn,
 .msg:focus-within .react-btn,
 .msg:focus-within .reply-btn,
 .msg:focus-within .edit-btn,
 .msg:focus-within .copy-btn,
+.msg:focus-within .pin-btn,
 .msg:focus-within .delete-btn {
   opacity: 0.55;
+  pointer-events: auto;
+}
+
+/* 고정된 메시지는 📌가 항상 보이고, 다시 누르면 해제 */
+.msg.pinned .pin-btn {
+  opacity: 1;
   pointer-events: auto;
 }
 
@@ -912,6 +922,7 @@ body {
 .msg .reply-btn:hover,
 .msg .edit-btn:hover,
 .msg .copy-btn:hover,
+.msg .pin-btn:hover,
 .msg .delete-btn:hover {
   opacity: 1;
 }
@@ -974,7 +985,8 @@ body {
   background: var(--bubble-other);
 }
 
-#theme-picker {
+#theme-picker,
+#export-picker {
   position: fixed;
   display: flex;
   flex-direction: column;
@@ -1262,6 +1274,7 @@ body {
   .reply-btn,
   .edit-btn,
   .copy-btn,
+  .pin-btn,
   .delete-btn {
     padding: 6px;
     font-size: 15px;
@@ -1480,4 +1493,234 @@ body {
   font-size: 10px;
   color: var(--muted);
   text-align: right;
+}
+
+.export-note {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 4px 10px 2px;
+}
+
+/* 고정 메시지 바 */
+#pin-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px;
+  background: var(--bubble-other);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.pin-bar-icon {
+  flex-shrink: 0;
+}
+
+#pin-bar-main {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  padding: 2px 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pin-bar-toggle {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+#pin-list {
+  max-height: 30vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.pin-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 20px;
+}
+
+.pin-row + .pin-row {
+  border-top: 1px solid var(--border);
+}
+
+.pin-row-main {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  padding: 8px 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pin-row-unpin {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px;
+}
+
+/* 인라인 수정 */
+.inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.msg.editing {
+  max-width: 80%;
+}
+
+.inline-edit-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.inline-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.inline-edit-hint {
+  margin-right: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.inline-edit-save,
+.inline-edit-cancel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inline-edit-save {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* 링크 미리보기 카드 */
+.link-card {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(127, 127, 127, 0.14);
+  color: inherit;
+  text-decoration: none;
+  max-width: 340px;
+}
+
+.link-card:hover {
+  background: rgba(127, 127, 127, 0.24);
+}
+
+.link-card-thumb {
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.link-card-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.link-card-site {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.link-card-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.link-card-desc {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.link-card-title,
+.link-card-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+#export-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+#export-btn:hover {
+  background: var(--bubble-other);
+}
+
+@media (max-width: 640px) {
+  #pin-bar,
+  .pin-row {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .link-card-thumb {
+    width: 52px;
+    height: 52px;
+  }
 }

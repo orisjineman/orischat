@@ -1,6 +1,7 @@
 import { DEFAULT_ROOM, IMAGE_MAX_LENGTH } from './constants.js';
 import {
   attachBtn,
+  messagesEl,
   chatMain,
   dropOverlay,
   emojiBtn,
@@ -10,6 +11,7 @@ import {
   messageInput,
 } from './elements.js';
 import { resizeImageFile } from './imageFile.js';
+import { startInlineEdit } from './messages.js';
 import { clearReply } from './reply.js';
 import { socket } from './socket.js';
 import { state } from './state.js';
@@ -40,6 +42,15 @@ messageForm.addEventListener('submit', (e) => {
 // 한글 등 IME로 글자를 조합하는 중의 Enter는 "조합 확정"이지 전송이 아님
 messageInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.isComposing || e.keyCode === 229)) e.preventDefault();
+});
+
+// 입력창이 비어 있을 때 ↑를 누르면 내가 마지막으로 보낸 텍스트 메시지를 바로 수정함
+messageInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowUp' || e.isComposing || messageInput.value) return;
+  const mine = Array.from(messagesEl.querySelectorAll('.msg.me .edit-btn')).pop();
+  if (!mine) return;
+  e.preventDefault();
+  startInlineEdit(mine.closest('.msg'));
 });
 
 // --- 입력 중이던 글 임시저장 (방마다, 새로고침해도 유지 / 탭을 닫으면 사라짐) ---
