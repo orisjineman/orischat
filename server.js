@@ -6,6 +6,7 @@ const { PORT, CLEANUP_INTERVAL_MS, PUBLIC_DIR } = require('./lib/config');
 const { createEmitters } = require('./lib/emitters');
 const { registerHandlers } = require('./lib/handlers');
 const { apiRouter } = require('./lib/routes');
+const { gifsRouter } = require('./lib/gifs');
 const { stickersRouter } = require('./lib/stickers');
 
 const app = express();
@@ -14,6 +15,7 @@ const io = new Server(server);
 
 // 스티커 라우터는 express.static보다 먼저 등록해야 우선 처리됨.
 app.use(apiRouter);
+app.use(gifsRouter);
 app.use(stickersRouter);
 app.use(express.static(PUBLIC_DIR));
 

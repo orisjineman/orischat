@@ -1,4 +1,5 @@
 import { messagesEl } from './elements.js';
+import { setLastSeen } from './lastSeen.js';
 import { socket } from './socket.js';
 import { state } from './state.js';
 
@@ -7,6 +8,7 @@ import { state } from './state.js';
 export function maybeMarkRead() {
   if (document.hidden || !state.latestMessageTime) return;
   socket.emit('mark-read', { time: state.latestMessageTime });
+  setLastSeen(state.room, state.latestMessageTime);
 }
 
 function updateReadStatuses() {

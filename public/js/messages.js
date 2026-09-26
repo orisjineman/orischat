@@ -1,5 +1,6 @@
 import { HISTORY_PAGE_SIZE, NEAR_BOTTOM_THRESHOLD } from './constants.js';
 import { messagesEl, scrollBottomBtn, scrollBottomCount, typingIndicator } from './elements.js';
+import { getLastSeen } from './lastSeen.js';
 import { clearHistory, loadHistory, saveToHistory, updateHistoryEntry } from './historyStore.js';
 import { createAvatarEl } from './avatar.js';
 import { openLightbox } from './lightbox.js';
@@ -25,7 +26,7 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
   const kind = type || 'text';
   const text = content ?? message ?? '';
 
-  div.className = `msg ${mine ? 'me' : 'other'} ${kind === 'sticker' || kind === 'image' ? 'sticker' : ''}`;
+  div.className = `msg ${mine ? 'me' : 'other'} ${kind === 'sticker' || kind === 'image' || kind === 'gif' ? 'sticker' : ''}`;
   if (id) div.dataset.messageId = id;
   if (time) div.dataset.time = time;
 
@@ -73,6 +74,12 @@ function buildMessageEl({ id, type, content, message, nickname, time, mine, reac
     img.src = text;
     img.alt = '사진';
     img.className = 'sticker-img chat-image';
+    body.appendChild(img);
+  } else if (kind === 'gif') {
+    const img = document.createElement('img');
+    img.src = text;
+    img.alt = 'GIF';
+    img.className = 'sticker-img chat-image gif-img';
     body.appendChild(img);
   } else {
     renderLinkedText(body, text, state.roomUsers);
@@ -123,6 +130,37 @@ function scrollToBottom(behavior = 'auto') {
   resetUnreadBelow();
 }
 
+// --- 안 읽은 메시지 구분선 ---
+function createUnreadDivider() {
+  const div = document.createElement('div');
+  div.className = 'unread-divider';
+  div.textContent = '여기서부터 안 읽은 메시지';
+  return div;
+}
+
+function removeUnreadDivider() {
+  messagesEl.querySelectorAll('.unread-divider').forEach((el) => el.remove());
+}
+
+// 다시 들어왔을 때: 마지막으로 본 시각 이후 남이 쓴 첫 메시지 앞에 구분선을 넣고 거기로 이동함
+function placeUnreadDivider(lastSeen) {
+  removeUnreadDivider();
+  if (!lastSeen) return;
+  const unread = Array.from(messagesEl.querySelectorAll('.msg.other[data-time]')).filter((el) => Number(el.dataset.time) > lastSeen);
+  if (!unread.length) return;
+  const divider = createUnreadDivider();
+  unread[0].before(divider);
+  divider.scrollIntoView({ block: 'start' });
+  unreadBelow = unread.length;
+  updateUnreadBadge();
+  scrollBottomBtn.classList.remove('hidden');
+}
+
+// 탭을 떠나는 순간 구분선을 치워둠 — 그래야 자리를 비운 사이 온 메시지 앞에 새로 생김
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) removeUnreadDivider();
+});
+
 // --- 날짜 구분선 ---
 function createDateDivider(time) {
   const div = document.createElement('div');
@@ -157,8 +195,11 @@ function appendMessage(payload) {
     if (!prev || !isSameDay(Number(prev.dataset.time), payload.time)) messagesEl.appendChild(createDateDivider(payload.time));
   }
   messagesEl.appendChild(div);
-  if (wasNearBottom) {
+  // 내가 방금 보낸 메시지는 위를 읽던 중이어도 바로 보이게 맨 아래로 따라감
+  const justSentByMe = payload.mine && !payload.isHistory;
+  if (wasNearBottom || justSentByMe) {
     messagesEl.scrollTop = messagesEl.scrollHeight;
+    if (justSentByMe) resetUnreadBelow();
   } else {
     scrollBottomBtn.classList.remove('hidden');
     if (!payload.mine && !payload.isHistory) {
@@ -197,6 +238,30 @@ function scrollToMessage(messageId) {
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   target.classList.add('flash-highlight');
   setTimeout(() => target.classList.remove('flash-highlight'), 1200);
+}
+
+// 검색 결과에서 클릭했을 때: 이미 화면에 있으면 바로 이동하고, 더 오래된 메시지면
+// 화면의 가장 오래된 메시지까지 한 번에 불러온 뒤 이동함
+export function jumpToMessage({ id, time }) {
+  if (findMessageEl(id)) {
+    scrollToMessage(id);
+    return;
+  }
+  if (!state.oldestMessageTime || !time || time >= state.oldestMessageTime) {
+    showToast('메시지를 찾을 수 없어요', 2500);
+    return;
+  }
+  socket.emit('load-until', { fromTime: time, beforeTime: state.oldestMessageTime }, (older) => {
+    if (!older || older.length === 0) {
+      showToast('메시지를 찾을 수 없어요', 2500);
+      return;
+    }
+    prependMessages(older);
+    state.oldestMessageTime = older[0].time;
+    loadMoreBtn.classList.remove('hidden');
+    if (findMessageEl(id)) scrollToMessage(id);
+    else showToast('너무 오래된 메시지예요. "이전 메시지 더 보기"로 더 불러와주세요', 3500);
+  });
 }
 
 // --- 메시지 안의 버튼/링크 클릭 (이벤트 위임) ---
@@ -358,7 +423,10 @@ loadHistory().forEach((entry) => {
 
 // --- 서버 이벤트 ---
 socket.on('chat-message', (payload) => {
+  // 탭이 가려진 사이 처음 온 남의 메시지 앞에 "안 읽은 메시지" 구분선을 넣음
+  const startsUnread = document.hidden && !payload.mine && !messagesEl.querySelector('.unread-divider');
   appendMessage(payload);
+  if (startsUnread) messagesEl.lastElementChild.before(createUnreadDivider());
   if (!payload.mine) bumpTitleUnread();
   saveToHistory({ kind: 'chat', payload });
   maybeNotify(payload);
@@ -373,12 +441,14 @@ socket.on('history', (messages) => {
   messagesEl.innerHTML = '';
   clearHistory();
   resetUnreadBelow();
+  const lastSeen = getLastSeen(state.room); // maybeMarkRead가 갱신하기 전에 읽어둠
   messages.forEach((payload) => {
     appendMessage({ ...payload, isHistory: true });
     saveToHistory({ kind: 'chat', payload });
   });
   state.oldestMessageTime = messages.length ? messages[0].time : null;
   if (messages.length) state.latestMessageTime = messages[messages.length - 1].time;
+  placeUnreadDivider(lastSeen);
   maybeMarkRead();
   loadMoreBtn.classList.toggle('hidden', messages.length < HISTORY_PAGE_SIZE);
 });

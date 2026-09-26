@@ -1,6 +1,7 @@
 import { DEFAULT_ROOM, NICKNAME_KEY, PIN_KEY, ROOM_KEY } from './constants.js';
 import {
   chatScreen,
+  gifBtn,
   joinBtn,
   joinError,
   loginScreen,
@@ -55,8 +56,9 @@ if (state.nickname) {
 // 서버에 비밀번호가 설정되어 있을 때만 입력칸을 보여주고, 백그라운드 푸시 공개키를 받아둠
 fetch('/api/config')
   .then((res) => res.json())
-  .then(({ pinRequired, pushPublicKey: key }) => {
+  .then(({ pinRequired, pushPublicKey: key, gifEnabled }) => {
     if (pinRequired) pinInput.classList.remove('hidden');
+    gifBtn.classList.toggle('hidden', !gifEnabled); // 서버에 GIPHY 키가 있을 때만 GIF 버튼을 보여줌
     state.pushPublicKey = key || null;
     // 알림 권한이 이미 "허용"인 상태로 새로고침한 경우, 페이지 로드 시점의
     // 구독 시도는 이 fetch가 끝나기 전이라 공개키가 아직 없어서 건너뛰었을 수
@@ -134,6 +136,10 @@ socket.on('join-error', (msg) => {
   loginScreen.classList.remove('hidden');
   joinError.textContent = msg;
   joinError.classList.remove('hidden');
+  // 닉네임이 겹친 경우 등: 방금 쓰던 닉네임을 채워두고 바로 고칠 수 있게 함
+  if (!nicknameInput.value) nicknameInput.value = state.nickname;
+  nicknameInput.focus();
+  nicknameInput.select();
 });
 
 socket.on('user-list', (users) => {

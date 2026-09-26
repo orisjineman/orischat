@@ -43,3 +43,7 @@ export const connectionBanner = byId('connection-banner');
 export const scrollBottomCount = byId('scroll-bottom-count');
 export const mentionPopup = byId('mention-popup');
 export const dropOverlay = byId('drop-overlay');
+export const gifBtn = byId('gif-btn');
+export const gifPicker = byId('gif-picker');
+export const gifSearchInput = byId('gif-search-input');
+export const gifGrid = byId('gif-grid');

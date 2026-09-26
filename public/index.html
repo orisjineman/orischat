@@ -77,6 +77,11 @@
       <div id="typing-indicator"></div>
       <div id="emoji-picker" class="hidden"></div>
       <div id="mention-popup" class="hidden" role="listbox"></div>
+      <div id="gif-picker" class="hidden">
+        <input id="gif-search-input" type="search" placeholder="GIF 검색 (예: 고양이, 박수)" autocomplete="off" maxlength="50" />
+        <div id="gif-grid"></div>
+        <div class="gif-attribution">Powered by GIPHY</div>
+      </div>
       <div id="reply-banner" class="hidden">
         <span id="reply-banner-text"></span>
         <button type="button" id="reply-cancel-btn" aria-label="답장 취소">✕</button>
@@ -84,6 +89,7 @@
       <form id="message-form">
         <button type="button" id="emoji-btn" aria-label="이모티콘">😊</button>
         <button type="button" id="attach-btn" aria-label="사진 첨부">📎</button>
+        <button type="button" id="gif-btn" class="hidden" aria-label="GIF 검색">GIF</button>
         <input id="file-input" type="file" accept="image/*" class="hidden" />
         <div id="message-input-wrap">
           <input id="message-input" type="text" placeholder="메시지를 입력하세요" autocomplete="off" maxlength="500" />

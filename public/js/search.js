@@ -1,4 +1,5 @@
 import { searchBtn, searchCloseBtn, searchForm, searchInput, searchPanel, searchResults } from './elements.js';
+import { jumpToMessage } from './messages.js';
 import { socket } from './socket.js';
 import { state } from './state.js';
 import { formatTime, renderLinkedText } from './text.js';
@@ -30,6 +31,9 @@ searchForm.addEventListener('submit', (e) => {
       .forEach((payload) => {
         const item = document.createElement('div');
         item.className = 'search-result-item';
+        item.dataset.resultId = payload.id;
+        item.dataset.time = payload.time;
+        item.title = '클릭하면 이 메시지로 이동';
         const meta = document.createElement('div');
         meta.className = 'search-result-meta';
         meta.textContent = `${payload.nickname} · ${formatTime(payload.time)}`;
@@ -40,4 +44,13 @@ searchForm.addEventListener('submit', (e) => {
         searchResults.appendChild(item);
       });
   });
+});
+
+// 검색 결과를 누르면 대화 속 그 메시지로 이동 (패널은 닫아서 대화가 보이게 함)
+searchResults.addEventListener('click', (e) => {
+  if (e.target.closest('a')) return;
+  const item = e.target.closest('.search-result-item');
+  if (!item) return;
+  searchPanel.classList.add('hidden');
+  jumpToMessage({ id: item.dataset.resultId, time: Number(item.dataset.time) });
 });

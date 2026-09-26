@@ -16,7 +16,10 @@
 - 답장 (원문을 인용해서 표시, 원문이 삭제돼도 인용은 남음)
 - @닉네임 멘션 — `@`를 치면 방 사람 목록 자동완성, 하이라이트 표시되고, 멘션되면 탭을 보고 있어도 우선 알림
 - 사진 첨부 — 📎 버튼, Ctrl+V 붙여넣기, 끌어다 놓기 모두 지원. 브라우저에서 리사이즈/압축 후 전송(서버 파일시스템에는 저장 안 함, 용량 상한 있음)
-- 메시지 검색 (방 안에서)
+- 메시지 검색 (방 안에서) — 결과를 누르면 대화 속 그 메시지로 이동(화면에 없는 오래된 메시지는 자동으로 불러옴)
+- GIF 검색·전송 ([GIPHY](https://developers.giphy.com/), `GIPHY_API_KEY` 설정 시에만 GIF 버튼이 보임)
+- 안 읽은 메시지 구분선 — 다시 들어오면 마지막으로 본 곳 다음 메시지 앞에 "여기서부터 안 읽은 메시지" 표시
+- 같은 방에서 닉네임 중복 방지 (같은 브라우저의 재연결/다른 탭은 허용)
 - 메시지 링크 자동 하이퍼링크
 - 사진/스티커 클릭 시 확대해서 보기(라이트박스)
 - 답장 인용문 클릭하면 원본 메시지로 스크롤 이동
@@ -63,6 +66,12 @@ PORT=4000 npm start
 
 ```bash
 CHAT_PIN=1234 npm start
+```
+
+GIF 검색을 켜려면 [GIPHY 개발자 페이지](https://developers.giphy.com/)에서 무료 API 키를 발급받아 설정하세요. 키는 서버에서만 쓰고 브라우저에는 노출되지 않습니다 (안 정하면 GIF 버튼이 숨겨짐).
+
+```bash
+GIPHY_API_KEY=xxxx npm start
 ```
 
 Render에 배포한 경우 대시보드의 **Environment** 탭에서 환경 변수를 추가하면 됩니다.
@@ -150,6 +159,8 @@ Node 내장 테스트 러너(`node --test`)로 실행하며, 별도 서버나 DB
 | `http.test.js` | HTTP API, 스티커 서빙(경로 조작 차단), 프로필 사진 |
 | `chat-db.test.js` | DB 모드 통합 — 대화 기록 복원, 페이지네이션, 검색, 수정, 삭제, 7일 정리 (로컬 libSQL 파일 사용) |
 | `chat-pin.test.js` | `CHAT_PIN` 설정 서버 |
+| `nickname.test.js` | 같은 방 닉네임 중복 방지 |
+| `gif.test.js`, `gif-disabled.test.js` | GIF 검색 프록시(가짜 GIPHY 서버), GIF 메시지 URL 검증, 키 미설정 시 503 |
 | `db.test.js`, `db-disabled.test.js` | `db.js` 단위 테스트(옛 스키마 마이그레이션 포함), DB 미설정 시 계약 |
 | `push*.test.js` | 푸시 구독/발송 — 메모리·DB 두 저장 경로에 같은 시나리오, VAPID 미설정/반쪽 설정 (`web-push`는 가짜로 대체) |
 | `client.test.js` | 브라우저 클라이언트 — 실제 `index.html`을 [jsdom](https://github.com/jsdom/jsdom)에 올리고 가짜 소켓으로 서버 이벤트를 흉내내 DOM/전송 이벤트 검증 |

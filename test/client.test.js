@@ -59,7 +59,7 @@ class FakeSocket {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 // 각 테스트마다 새 DOM + 새 클라이언트 인스턴스를 띄움
-async function boot({ session = {}, local = {}, url = 'http://localhost/', config = {}, rooms = [], stickers = [] } = {}) {
+async function boot({ session = {}, local = {}, url = 'http://localhost/', config = {}, rooms = [], stickers = [], extraRoutes = {} } = {}) {
   const dom = new JSDOM(HTML, { url, pretendToBeVisual: true });
   const { window } = dom;
   windows.push(window);
@@ -78,10 +78,11 @@ async function boot({ session = {}, local = {}, url = 'http://localhost/', confi
     '/api/config': config,
     '/api/rooms': rooms,
     '/api/stickers': stickers,
+    ...extraRoutes,
   };
   const fetchStub = async (u) => {
     if (!(u in routes)) throw new Error(`unexpected fetch ${u}`);
-    return { json: async () => routes[u] };
+    return { ok: true, json: async () => routes[u] };
   };
 
   const set = (name, value) => Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
@@ -954,7 +955,6 @@ test('스크롤을 올려 읽는 중 새 메시지가 오면 ⬇ 버튼에 개�
   Object.defineProperty(messages, 'clientHeight', { value: 500, configurable: true });
   Object.defineProperty(messages, 'scrollTop', { value: 0, configurable: true, writable: true });
   socket.trigger('chat-message', chatMsg({ id: 'n1' }));
-  socket.trigger('chat-message', chatMsg({ id: 'n2', mine: true }));
   socket.trigger('chat-message', chatMsg({ id: 'n3' }));
   assert.equal($('#scroll-bottom-count').textContent, '2');
   assert.ok(!$('#scroll-bottom-count').classList.contains('hidden'));
@@ -1064,4 +1064,155 @@ test('파일을 끌어오면 안내가 뜨고, 놓거나 벗어나면 사라진�
   const drop = drag('drop');
   assert.equal(drop.defaultPrevented, true);
   assert.ok($('#drop-overlay').classList.contains('hidden'));
+});
+
+// ---------------------------------------------------------------- 안 읽은 구분선 / 검색 이동 / GIF / 닉네임 중복
+
+const LASTSEEN_KEY = 'orischat-lastseen-general';
+
+test('다시 들어왔을 때 마지막으로 본 시각 이후 남의 첫 메시지 앞에 "안 읽은 메시지" 구분선이 들어간다', async () => {
+  const { socket, $, $$ } = await boot({ local: { [LASTSEEN_KEY]: '1700000000500' } });
+  socket.trigger('joined', { nickname: '나', room: 'general' });
+  socket.trigger('history', [
+    chatMsg({ id: 'a', time: 1700000000100 }),
+    chatMsg({ id: 'b', time: 1700000000400, mine: true }),
+    chatMsg({ id: 'c', time: 1700000000600, mine: true }), // 내 메시지는 안 읽은 것으로 안 침
+    chatMsg({ id: 'd', time: 1700000000700 }),
+    chatMsg({ id: 'e', time: 1700000000800 }),
+  ]);
+  assert.equal($$('.unread-divider').length, 1);
+  assert.equal($('.unread-divider').nextElementSibling.dataset.messageId, 'd');
+  assert.equal($('#scroll-bottom-count').textContent, '2');
+});
+
+test('처음 방문이거나 다 읽었으면 구분선이 없고, 본 시각은 갱신된다', async () => {
+  const first = await bootJoined();
+  first.socket.trigger('history', [chatMsg({ id: 'a', time: 1700000000100 })]);
+  assert.equal(first.$$('.unread-divider').length, 0);
+  assert.equal(first.window.localStorage.getItem(LASTSEEN_KEY), '1700000000100'); // 탭이 보이는 상태라 읽음 처리됨
+
+  const caughtUp = await boot({ local: { [LASTSEEN_KEY]: '1700000000900' } });
+  caughtUp.socket.trigger('joined', { nickname: '나', room: 'general' });
+  caughtUp.socket.trigger('history', [chatMsg({ id: 'a', time: 1700000000100 })]);
+  assert.equal(caughtUp.$$('.unread-divider').length, 0);
+});
+
+test('탭이 가려진 사이 처음 온 남의 메시지 앞에 구분선이 생기고, 두 번째 메시지에는 안 생긴다', async () => {
+  const { socket, document, $, $$ } = await bootJoined();
+  Object.defineProperty(document, 'hidden', { value: true, configurable: true });
+  socket.trigger('chat-message', chatMsg({ id: 'x1' }));
+  socket.trigger('chat-message', chatMsg({ id: 'x2' }));
+  assert.equal($$('.unread-divider').length, 1);
+  assert.equal($('.unread-divider').nextElementSibling.dataset.messageId, 'x1');
+  Object.defineProperty(document, 'hidden', { value: false, configurable: true });
+});
+
+test('검색 결과를 누르면 이미 화면에 있는 메시지로 이동(강조)하고 검색 패널이 닫힌다', async () => {
+  const { socket, $, $$, fire } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'target', content: '찾는 글' }));
+  $('#search-btn').click();
+  $('#search-input').value = '찾는';
+  fire($('#search-form'), 'submit');
+  socket.lastSent('search-messages').args[1]([chatMsg({ id: 'target', content: '찾는 글' })]);
+  $('.search-result-item').click();
+  assert.ok($('[data-message-id="target"]').classList.contains('flash-highlight'));
+  assert.ok($('#search-panel').classList.contains('hidden'));
+  assert.equal(socket.sent('load-until').length, 0);
+  assert.equal($$('.search-result-item').length, 1);
+});
+
+test('화면에 없는 오래된 메시지를 누르면 load-until로 불러와 붙이고 이동한다', async () => {
+  const { socket, $, fire } = await bootJoined();
+  socket.trigger('history', [chatMsg({ id: 'new1', time: 1700000100000 })]);
+  $('#search-btn').click();
+  $('#search-input').value = '옛날';
+  fire($('#search-form'), 'submit');
+  const old = chatMsg({ id: 'old', content: '옛날 글', time: 1700000000000 });
+  socket.lastSent('search-messages').args[1]([old]);
+  $('.search-result-item').click();
+
+  const req = socket.lastSent('load-until');
+  assert.deepEqual(req.args[0], { fromTime: 1700000000000, beforeTime: 1700000100000 });
+  req.args[1]([old, chatMsg({ id: 'mid', time: 1700000050000 })]);
+  assert.ok($('[data-message-id="old"]'));
+  assert.ok($('[data-message-id="old"]').classList.contains('flash-highlight'));
+});
+
+test('불러오지 못하면 안내 토스트가 뜬다', async () => {
+  const { socket, $, fire } = await bootJoined();
+  socket.trigger('history', [chatMsg({ id: 'new1', time: 1700000100000 })]);
+  $('#search-btn').click();
+  $('#search-input').value = 'x';
+  fire($('#search-form'), 'submit');
+  socket.lastSent('search-messages').args[1]([chatMsg({ id: 'gone', time: 1700000000000 })]);
+  $('.search-result-item').click();
+  socket.lastSent('load-until').args[1]([]);
+  assert.equal($('#rate-limit-toast').textContent, '메시지를 찾을 수 없어요');
+});
+
+test('GIF 버튼은 서버에서 GIF가 켜졌을 때만 보인다', async () => {
+  const off = await boot({ config: { gifEnabled: false } });
+  assert.ok(off.$('#gif-btn').classList.contains('hidden'));
+  const on = await boot({ config: { gifEnabled: true } });
+  assert.ok(!on.$('#gif-btn').classList.contains('hidden'));
+});
+
+test('GIF 버튼 → 인기 GIF 목록 → 클릭하면 gif 메시지가 전송된다', async () => {
+  const gif = { id: 'g1', preview: 'https://media1.giphy.com/media/g1/100w.gif', url: 'https://media1.giphy.com/media/g1/200w.gif' };
+  const { socket, $, $$ } = await bootJoined({ config: { gifEnabled: true }, extraRoutes: { '/api/gifs?q=': [gif] } });
+  $('#gif-btn').click();
+  await tick();
+  assert.ok(!$('#gif-picker').classList.contains('hidden'));
+  assert.equal($$('.gif-item').length, 1);
+  $('.gif-item').click();
+  assert.deepEqual(socket.lastSent('chat-message').args[0], { type: 'gif', content: gif.url });
+  assert.ok($('#gif-picker').classList.contains('hidden'));
+});
+
+test('GIF 검색어를 입력하면 잠깐 뒤 그 검색어로 다시 불러온다', async () => {
+  const cat = { id: 'c1', preview: 'https://media1.giphy.com/media/c1/100w.gif', url: 'https://media1.giphy.com/media/c1/200w.gif' };
+  const { $, $$, fire } = await bootJoined({
+    config: { gifEnabled: true },
+    extraRoutes: { '/api/gifs?q=': [], [`/api/gifs?q=${encodeURIComponent('고양이')}`]: [cat] },
+  });
+  $('#gif-btn').click();
+  await tick();
+  assert.equal($('#gif-grid').textContent, '검색 결과가 없어요.');
+  $('#gif-search-input').value = '고양이';
+  fire($('#gif-search-input'), 'input');
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal($$('.gif-item').length, 1);
+});
+
+test('GIF 메시지는 이미지로 그려지고(클릭 시 확대), 답장 미리보기는 "GIF"다', async () => {
+  const { socket, $, $$ } = await bootJoined();
+  socket.trigger('chat-message', chatMsg({ id: 'gm', type: 'gif', content: 'https://media1.giphy.com/media/g1/200w.gif' }));
+  const img = $('.gif-img');
+  assert.equal(img.src, 'https://media1.giphy.com/media/g1/200w.gif');
+  assert.ok($('.msg').classList.contains('sticker'));
+  assert.equal($$('.copy-btn').length, 0);
+  $('.reply-btn').click();
+  assert.equal(socket.emitted.length >= 0, true);
+  assert.match($('#reply-banner-text').textContent, /GIF$/);
+});
+
+test('닉네임이 겹쳐서 입장이 거절되면 쓰던 닉네임이 입력칸에 채워진다', async () => {
+  const { socket, $ } = await boot({ session: { 'orischat-nickname': '철수' } });
+  socket.trigger('join-error', '이미 사용 중인 닉네임입니다. 다른 닉네임을 써주세요.');
+  assert.ok(!$('#login-screen').classList.contains('hidden'));
+  assert.equal($('#nickname-input').value, '철수');
+  assert.match($('#join-error').textContent, /이미 사용 중/);
+});
+
+test('위를 읽던 중이어도 내가 보낸 메시지는 맨 아래로 따라가고, 남의 메시지는 안 따라간다', async () => {
+  const { socket, $ } = await bootJoined();
+  const messages = $('#messages');
+  Object.defineProperty(messages, 'scrollHeight', { value: 3000, configurable: true });
+  Object.defineProperty(messages, 'clientHeight', { value: 500, configurable: true });
+  Object.defineProperty(messages, 'scrollTop', { value: 0, configurable: true, writable: true });
+  socket.trigger('chat-message', chatMsg({ id: 'o1' }));
+  assert.equal(messages.scrollTop, 0);
+  socket.trigger('chat-message', chatMsg({ id: 'me1', mine: true }));
+  assert.equal(messages.scrollTop, 3000);
+  assert.ok($('#scroll-bottom-count').classList.contains('hidden'));
 });

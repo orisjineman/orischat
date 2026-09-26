@@ -391,3 +391,21 @@ test('서버 재시작처럼 권한 캐시가 비어 있어도, history를 받�
   const remaining = await db.getRecentMessages(room, 50);
   assert.deepEqual(remaining.map((m) => m.id), ['perm-others']);
 });
+
+test('load-until: 화면의 가장 오래된 메시지부터 찾는 시각까지 빈틈없이 한 번에 불러온다', async () => {
+  const room = 'db-jump';
+  const base = Date.now() - 50_000;
+  for (let i = 0; i < 20; i++) {
+    await db.insertMessage({ id: `jump-${i}`, type: 'text', content: `j${i}`, nickname: 'x', clientId: 'x', room, time: base + i, replyTo: null });
+  }
+  await withClients([{ nickname: 'jumper', room, clientId: 'jumper-id' }], async ([sock]) => {
+    const older = await new Promise((resolve) => sock.emit('load-until', { fromTime: base + 3, beforeTime: base + 15 }, resolve));
+    assert.deepEqual(older.map((m) => m.content), Array.from({ length: 12 }, (_, i) => `j${i + 3}`)); // 시간순, from 포함/before 제외
+    assert.equal('clientId' in older[0], false);
+
+    // 잘못된 요청은 빈 배열
+    for (const bad of [{ fromTime: base + 10, beforeTime: base + 5 }, { fromTime: 'abc', beforeTime: base }, {}]) {
+      assert.deepEqual(await new Promise((resolve) => sock.emit('load-until', bad, resolve)), []);
+    }
+  });
+});

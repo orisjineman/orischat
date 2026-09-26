@@ -13,5 +13,6 @@ import './js/read.js';
 import './js/messages.js';
 import './js/compose.js';
 import './js/mention.js';
+import './js/gif.js';
 import './js/search.js';
 import './js/login.js';

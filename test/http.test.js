@@ -21,7 +21,7 @@ const get = (p) => fetch(`${getBaseUrl()}${p}`);
 test('/api/config: 비밀번호/푸시가 설정되지 않은 상태를 알려준다', async () => {
   const res = await get('/api/config');
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { pinRequired: false, pushPublicKey: null });
+  assert.deepEqual(await res.json(), { pinRequired: false, pushPublicKey: null, gifEnabled: false });
 });
 
 test('/api/stickers: public/stickers 폴더의 이미지 파일 목록을 정렬해서 준다', async () => {

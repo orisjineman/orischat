@@ -16,7 +16,7 @@ import { state } from './state.js';
 import { escapeHtml } from './text.js';
 
 // 답장 중이면 함께 실어서 보내고, 보낸 뒤엔 답장 상태를 비움
-function sendChatMessage(data) {
+export function sendChatMessage(data) {
   const payload = { ...data };
   if (state.pendingReplyTo) {
     payload.replyTo = state.pendingReplyTo;
@@ -99,7 +99,10 @@ emojiBtn.addEventListener('click', async (e) => {
   e.stopPropagation();
   const willOpen = emojiPicker.classList.contains('hidden');
   emojiPicker.classList.toggle('hidden');
-  if (willOpen) await buildEmojiPicker();
+  if (willOpen) {
+    document.getElementById('gif-picker')?.classList.add('hidden');
+    await buildEmojiPicker();
+  }
 });
 
 emojiPicker.addEventListener('click', (e) => {
