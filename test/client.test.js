@@ -914,7 +914,7 @@ test('사진/스티커를 누르면 라이트박스가 열리고, 배경·닫기
 test('테마 선택: 옵션을 고르면 data-theme와 localStorage가 바뀌고, 시스템 설정이면 제거된다', async () => {
   const { $, $$, document, window } = await boot();
   assert.equal(document.documentElement.getAttribute('data-theme'), null);
-  assert.equal($$('#theme-picker .theme-option').length, 6);
+  assert.equal($$('#theme-picker .theme-option').length, 7);
 
   $('#theme-toggle-btn').click();
   assert.ok(!$('#theme-picker').classList.contains('hidden'));

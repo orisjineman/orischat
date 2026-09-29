@@ -9,6 +9,7 @@ const THEME_OPTIONS = [
   { value: 'intellij', icon: '🧠', label: 'IntelliJ' },
   { value: 'excel', icon: '📊', label: 'Excel' },
   { value: 'claude', icon: '✳️', label: 'Claude' },
+  { value: 'claude-dark', icon: '🌒', label: 'Claude 다크' },
 ];
 
 const themePicker = document.createElement('div');
