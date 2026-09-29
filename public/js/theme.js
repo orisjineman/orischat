@@ -8,6 +8,7 @@ const THEME_OPTIONS = [
   { value: 'dark', icon: '🌙', label: '다크' },
   { value: 'intellij', icon: '🧠', label: 'IntelliJ' },
   { value: 'excel', icon: '📊', label: 'Excel' },
+  { value: 'claude', icon: '✳️', label: 'Claude' },
 ];
 
 const themePicker = document.createElement('div');

@@ -38,7 +38,7 @@
 - 날짜 구분선(오늘/어제/날짜), 탭 제목에 안 읽은 메시지 수 `(3) OrisChat`
 - 메시지 복사 버튼, 액션 버튼(답장/반응/복사/수정/삭제)은 마우스를 올리거나 탭했을 때만 표시, 터치 기기에서는 길게 눌러 답장
 - 연결이 끊기거나 서버가 깨어나는 중이면 안내 배너 표시
-- 테마 선택 — 시스템 설정 따라가기 / 라이트 / 다크 / IntelliJ / Excel (IntelliJ·Excel은 리본 메뉴, 수식 입력줄, IDE 메뉴바·탭·상태바까지 흉내 낸 "업무 중인 척" 테마)
+- 테마 선택 — 시스템 설정 따라가기 / 라이트 / 다크 / IntelliJ / Excel / Claude (IntelliJ·Excel은 리본 메뉴, 수식 입력줄, IDE 메뉴바·탭·상태바까지 흉내 낸 "업무 중인 척" 테마, Claude는 크림색 배경에 상대 메시지가 답변처럼 보이는 데스크톱 앱 느낌 테마)
 - PWA (홈 화면에 추가해서 앱처럼 사용 가능)
 - 다른 사람에게 내 영구 식별자가 노출되지 않음 (닉네임을 바꿔도 안 변하는 값이라 추적 우려가 있어, 서버가 "내가 쓴 메시지인지"만 계산해서 알려주고 원래 값은 절대 넘기지 않음)
 
@@ -153,7 +153,7 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 │                            #   history, pins, linkPreview, avatar, presence, pushSubscription)
 ├── public/
 │   ├── index.html           # 채팅 화면 UI
-│   ├── style.css            # 스타일 (라이트/다크/IntelliJ/Excel 테마)
+│   ├── style.css            # 스타일 (라이트/다크/IntelliJ/Excel/Claude 테마)
 │   ├── client.js            # 클라이언트 진입점 — js/ 모듈을 불러옴
 │   ├── js/                  # 기능별 ES 모듈 (login, messages, compose, mention, gif, pins,
 │   │                        # export, linkPreview, avatar, reactions, reply, search, read,

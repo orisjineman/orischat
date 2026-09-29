@@ -47,7 +47,7 @@
           <button type="button" id="theme-toggle-btn" aria-label="테마 선택">🌓</button>
         </div>
       </header>
-      <!-- 엑셀/인텔리제이 테마일 때만 보이는 장식용 UI (실제 기능 없음, 순수 눈속임용) -->
+      <!-- 엑셀/인텔리제이/클로드 테마일 때만 보이는 장식용 UI (실제 기능 없음, 순수 눈속임용) -->
       <div id="excel-ribbon" class="theme-chrome" aria-hidden="true">
         <div class="excel-ribbon-tabs">
           <span class="active">홈</span><span>삽입</span><span>페이지 레이아웃</span><span>수식</span><span>데이터</span><span>검토</span><span>보기</span>
@@ -63,6 +63,11 @@
         <div class="intellij-tabs">
           <span class="active">ChatRoom.kt</span><span>MessageHandler.kt</span>
         </div>
+      </div>
+      <div id="claude-chrome" class="theme-chrome" aria-hidden="true">
+        <span class="claude-spark">✳</span>
+        <span class="claude-model">Claude Sonnet ▾</span>
+        <span class="claude-tag">새 채팅</span>
       </div>
       <div id="pin-bar" class="hidden">
         <span class="pin-bar-icon" aria-hidden="true">📌</span>
@@ -103,6 +108,7 @@
         </div>
         <button type="submit">보내기</button>
       </form>
+      <div id="claude-footnote" class="theme-chrome" aria-hidden="true">Claude는 실수를 할 수 있습니다. 응답을 다시 한번 확인해 주세요.</div>
       <div id="intellij-statusbar" class="theme-chrome" aria-hidden="true">
         <span>🌿 main</span><span>UTF-8</span><span>4 spaces</span><span>Ln 1, Col 1</span>
       </div>
