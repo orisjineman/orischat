@@ -117,7 +117,7 @@ orischat/
 │
 └── .github/workflows/
     ├── test.yml               #   push/PR마다 npm test (Node 20)
-    └── keep-alive.yml         #   10분마다 Render 앱 핑 (무료 플랜 슬립 방지)
+    └── keep-alive.yml         #   평일 KST 08~18시에 14분마다 Render 앱 핑 (무료 플랜 슬립 방지)
 ```
 
 Git에 올라가지 않는 런타임 폴더: `node_modules/`, `.stickers-cache/`(축소된 스티커 캐시).

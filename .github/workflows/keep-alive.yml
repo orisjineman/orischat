@@ -2,8 +2,12 @@ name: Keep Render app awake
 
 on:
   schedule:
-    # Render 무료 플랜은 15분간 요청이 없으면 잠들기 때문에, 10분마다 핑을 보내서 항상 깨어있게 함
-    - cron: "*/10 * * * *"
+    # Render 무료 플랜은 15분간 요청이 없으면 잠듦. 주로 쓰는 시간(평일 한국시간 08~18시)에만
+    # 14분마다 핑을 보내 깨워두고, 밤·주말에는 재워둠. cron은 UTC 기준 (KST = UTC+9).
+    # GitHub의 schedule은 부하에 따라 늦어지거나 건너뛰기도 해서 간격이 정확히 지켜지진 않음.
+    - cron: "40-59/14 22 * * 0-4" # KST 월~금 07:40, 07:54 — 사용 시작 전에 미리 깨움
+    - cron: "*/14 23 * * 0-4" # KST 월~금 08시대
+    - cron: "*/14 0-8 * * 1-5" # KST 월~금 09:00~17:56
   workflow_dispatch: {}
 
 permissions:
@@ -14,7 +18,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping OrisChat
-        run: curl -sf "${{ secrets.APP_URL }}" > /dev/null
+        # 잠든 서버를 깨우는 동안(콜드 스타트 30~60초) Render가 바로 에러 코드를 돌려줄 수 있어서,
+        # 한 번 실패로 끝내지 않고 10초 간격으로 다시 시도함. 상태 코드는 로그에 남김.
+        run: |
+          curl -sSf -o /dev/null -w "HTTP %{http_code} (%{time_total}s)\n" \
+            --connect-timeout 30 --max-time 90 \
+            --retry 6 --retry-delay 10 --retry-all-errors \
+            "${{ secrets.APP_URL }}"
 
       - name: Render가 남기는 GitHub Deployment 기록 정리 (environment_url에 도메인 노출됨)
         env:
