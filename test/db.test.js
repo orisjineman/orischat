@@ -9,6 +9,7 @@ const dbFile = path.join(tmpDir, 'unit.db');
 process.env.TURSO_DATABASE_URL = `file:${dbFile}`;
 
 const { test, before, after } = require('node:test');
+const { removeTmpDir } = require('./helpers/tmp-dir');
 const assert = require('node:assert/strict');
 const { createClient } = require('@libsql/client');
 
@@ -32,7 +33,7 @@ before(async () => {
 });
 
 after(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  removeTmpDir(tmpDir);
 });
 
 const DAY = 24 * 60 * 60 * 1000;

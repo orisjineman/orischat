@@ -11,6 +11,7 @@ process.env.VAPID_PRIVATE_KEY = 'test-private-key';
 delete process.env.VAPID_SUBJECT;
 
 const { test, before, after } = require('node:test');
+const { removeTmpDir } = require('./helpers/tmp-dir');
 const assert = require('node:assert/strict');
 const { installFakeWebPush } = require('./helpers/fake-webpush');
 
@@ -24,7 +25,7 @@ before(async () => {
 });
 
 after(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  removeTmpDir(tmpDir);
 });
 
 test('DB 모드: 기본 subject로 초기화되고, 구독이 실제로 DB에 저장/삭제된다', async () => {

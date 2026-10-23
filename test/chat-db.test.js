@@ -10,6 +10,7 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'orischat-db-'));
 process.env.TURSO_DATABASE_URL = `file:${path.join(tmpDir, 'test.db')}`;
 
 const { test, before, after } = require('node:test');
+const { removeTmpDir } = require('./helpers/tmp-dir');
 const assert = require('node:assert/strict');
 const { server, start } = require('../server');
 const db = require('../db');
@@ -32,7 +33,7 @@ before(async () => {
 
 after(() => {
   server.close();
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  removeTmpDir(tmpDir);
 });
 
 // 메시지를 보내고, 보낸 사람이 자기 메시지를 돌려받을 때까지(=DB 저장 끝) 기다림
