@@ -130,6 +130,7 @@ Node 내장 테스트 러너(`node --test`)로 실행하며, 별도 서버나 DB
 | `chat-db.test.js` | DB 모드 통합 — 대화 기록 복원, 페이지네이션, 검색, 수정, 삭제, 고정·내보내기, 7일 정리 (로컬 libSQL 파일 사용) |
 | `chat-pin.test.js` | `CHAT_PIN` 설정 서버 |
 | `nickname.test.js` | 같은 방 닉네임 중복 방지 |
+| `shutdown.test.js` | 정상 종료(`stop()`) — 소켓 끊김, 서버 닫힘 |
 | `pins.test.js` | 메시지 고정/해제, 개수 상한, 삭제 시 함께 해제, 입장 시 목록 수신 (메모리 모드) |
 | `link-preview.test.js`, `link-preview-blocked.test.js` | 링크 미리보기 — 가짜 웹 서버로 파싱/썸네일/리다이렉트/캐시 검증, 기본 설정에서 내부망 주소 차단(SSRF) 검증 |
 | `gif.test.js`, `gif-disabled.test.js` | GIF 검색 프록시(가짜 GIPHY 서버), GIF 메시지 URL 검증, 키 미설정 시 503 |

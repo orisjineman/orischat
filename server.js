@@ -50,10 +50,29 @@ function start(port = PORT) {
     });
 }
 
+// 정상 종료: 모든 소켓에 연결 종료를 알리고 HTTP 서버를 닫음. 그냥 프로세스가 죽으면
+// 클라이언트는 연결이 끊긴 걸 늦게 알아채는데, 이렇게 닫아주면 바로 재연결을 시도해서
+// 재배포 후 새 인스턴스에 금방 다시 붙음.
+function stop() {
+  return new Promise((resolve) => io.close(() => resolve()));
+}
+
+// Render는 재배포/재시작할 때 SIGTERM을 보냄. 오래 걸리는 연결 때문에 종료가 막히지
+// 않도록 일정 시간이 지나면 강제로 끝냄.
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
+function shutdownOnSignal(signal) {
+  console.log(`${signal} 수신 — 연결을 정리하고 종료합니다.`);
+  setTimeout(() => process.exit(0), SHUTDOWN_TIMEOUT_MS).unref();
+  stop().then(() => process.exit(0));
+}
+
 // 테스트에서 require('./server')로 불러와 직접 listen을 제어할 수 있도록,
 // 이 파일이 커맨드로 바로 실행됐을 때만 자동으로 서버를 띄움.
 if (require.main === module) {
+  process.once('SIGTERM', shutdownOnSignal);
+  process.once('SIGINT', shutdownOnSignal);
   start();
 }
 
-module.exports = { app, server, io, start };
+module.exports = { app, server, io, start, stop };

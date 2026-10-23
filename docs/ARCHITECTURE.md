@@ -22,7 +22,7 @@
 
 ```
 orischat/
-├── server.js                  # 진입점: Express + Socket.IO 조립, DB init, 7일 정리 타이머, start(port)
+├── server.js                  # 진입점: Express + Socket.IO 조립, DB init, 7일 정리 타이머, start(port)/stop(), SIGTERM 정상 종료
 ├── db.js                      # 저장소 파사드 — lib/db/* 를 모아 하나의 객체로 내보냄 (enabled 플래그 포함)
 ├── push.js                    # Web Push: VAPID 설정, 구독/해지, 방 단위 알림 발송 (본문 미포함)
 ├── package.json               # 스크립트: start / dev / test
@@ -238,7 +238,7 @@ DB가 꼭 필요한 기능(더 보기, 검색, 수정, 내보내기)은 핸들�
 
 | 모드 | 파일 |
 | --- | --- |
-| 메모리 (기본) | `chat.test.js`, `chat-events.test.js`, `pins.test.js`, `nickname.test.js`, `http.test.js` |
+| 메모리 (기본) | `chat.test.js`, `chat-events.test.js`, `pins.test.js`, `nickname.test.js`, `http.test.js`, `shutdown.test.js` |
 | DB (로컬 libSQL 파일) | `chat-db.test.js`, `db.test.js`, `push-db.test.js` |
 | 기능 꺼짐/반쪽 설정 | `db-disabled`, `push-disabled`, `push-half-config`, `gif-disabled`, `link-preview-blocked` |
 | PIN 설정 | `chat-pin.test.js` |
