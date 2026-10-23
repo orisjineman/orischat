@@ -85,7 +85,11 @@ orischat/
 │       ├── elements.js        #     DOM 요소 참조 모음
 │       ├── login.js           #     입장 화면, 방 목록, 재입장
 │       ├── connection.js      #     연결/재연결 상태 표시
-│       ├── messages.js        #     메시지 렌더링·수정·삭제·고정·스크롤·더 보기 (가장 큰 모듈)
+│       ├── messages.js        #     메시지 목록: 붙이기·날짜 구분선·더 보기·검색 이동, 메시지 서버 이벤트
+│       ├── messageElement.js  #     말풍선 하나의 DOM 생성·삭제 상태 반영
+│       ├── messageInteractions.js #   말풍선 버튼 클릭(이벤트 위임), 길게 눌러 답장
+│       ├── inlineEdit.js      #     말풍선 자리에서 바로 수정
+│       ├── scroll.js          #     맨 아래 따라가기, ⬇ 버튼·배지, 안 읽은 구분선, 메시지로 이동
 │       ├── compose.js         #     입력창, 전송, 스티커·사진 선택
 │       ├── imageFile.js       #     사진 리사이즈/압축 → data URL
 │       ├── gif.js             #     GIF 검색 패널

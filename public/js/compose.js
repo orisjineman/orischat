@@ -11,7 +11,7 @@ import {
   messageInput,
 } from './elements.js';
 import { resizeImageFile } from './imageFile.js';
-import { startInlineEdit } from './messages.js';
+import { startInlineEdit } from './inlineEdit.js';
 import { clearReply } from './reply.js';
 import { socket } from './socket.js';
 import { state } from './state.js';
