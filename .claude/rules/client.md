@@ -14,6 +14,7 @@ paths:
 - 저장소 키는 `constants.js`의 `orischat-*` 키 사용. 탭 단위로 유지할 값(닉네임·PIN·방·대화 캐시)은 sessionStorage,
   기기에 남길 값(clientId·테마·마지막 읽은 시각)은 localStorage.
 - `clientId`는 서버에만 보냄. 다른 사람 메시지가 "내 것"인지는 서버가 내려주는 `mine`으로만 판단.
-- 색은 하드코딩하지 말고 `style.css`의 CSS 변수 사용 — 테마(light/dark/intellij/excel/claude/claude-dark)마다 변수가 재정의됨.
-  새 테마는 `:root[data-theme="<값>"]` 블록 + `js/theme.js` 목록에 추가.
+- 스타일은 `public/css/`에 영역별로 나뉘어 있고 `index.html`의 `<link>` 순서가 곧 캐스케이드 순서 — 새 파일은 순서를 고려해 추가.
+- 색은 하드코딩하지 말고 `css/tokens.css`의 CSS 변수 사용 — 테마(light/dark/intellij/excel/claude/claude-dark)마다 변수가 재정의됨.
+  새 테마는 `css/tokens.css`에 `:root[data-theme="<값>"]` 블록 + `js/theme.js` 목록에 추가.
 - 모바일(PWA) 화면이 주 사용 환경이므로 좁은 폭에서도 확인할 것.

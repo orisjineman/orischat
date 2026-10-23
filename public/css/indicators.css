@@ -1,0 +1,138 @@
+/* 날짜/안 읽은 구분선, 연결 배너, 새 메시지 배지, @멘션 팝업, 끌어다 놓기, 도배 경고 토스트 */
+
+/* 날짜 구분선 */
+.date-divider {
+  align-self: center;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bubble-other);
+  padding: 3px 12px;
+  border-radius: 999px;
+  margin: 6px 0;
+}
+
+/* 연결 끊김/서버 깨어나는 중 안내 */
+#connection-banner {
+  background: #b26a00;
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+  padding: 6px 12px;
+}
+
+/* ⬇ 버튼의 새 메시지 수 배지 */
+#scroll-bottom-count {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* @멘션 자동완성 */
+#mention-popup {
+  position: absolute;
+  left: 20px;
+  bottom: 72px;
+  min-width: 160px;
+  max-width: calc(100% - 40px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  z-index: 15;
+}
+
+.mention-item {
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mention-item.active,
+.mention-item:hover {
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+}
+
+/* 사진을 끌어다 놓을 때 나오는 안내 */
+#drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 3px dashed var(--accent);
+  color: var(--accent);
+  font-size: 18px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* 안 읽은 메시지 구분선 */
+.unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #e5484d;
+  margin: 6px 0;
+}
+
+.unread-divider::before,
+.unread-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+/* 검색 결과를 누르면 이동 */
+.search-result-item {
+  cursor: pointer;
+}
+
+.search-result-item:hover {
+  background: var(--bubble-other);
+}
+
+#rate-limit-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 90px;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  z-index: 25;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+#rate-limit-toast.show {
+  opacity: 1;
+}

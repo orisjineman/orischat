@@ -1,0 +1,193 @@
+/* 엑셀/인텔리제이/클로드 테마 전용 장식 UI */
+
+/* 엑셀/인텔리제이 테마 전용 장식 UI — 평소엔 숨겨두고 해당 테마일 때만 보임 */
+.theme-chrome {
+  display: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+:root[data-theme="excel"] #room-label::after {
+  content: ' - Excel';
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+:root[data-theme="intellij"] #room-label::after {
+  content: ' – ChatRoom [main]';
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+:root[data-theme^="claude"] #room-label::after {
+  content: ' – Claude';
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+:root[data-theme^="claude"] #claude-chrome {
+  display: flex;
+}
+
+:root[data-theme^="claude"] #claude-footnote {
+  display: block;
+}
+
+#claude-chrome {
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.claude-spark {
+  color: var(--accent);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.claude-model {
+  padding: 3px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.claude-tag {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+#claude-footnote {
+  padding: 4px 20px 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+:root[data-theme="excel"] #excel-ribbon {
+  display: block;
+}
+
+#excel-ribbon {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-family: Calibri, Arial, sans-serif;
+}
+
+.excel-ribbon-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px 14px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.excel-ribbon-tabs span {
+  padding: 5px 10px;
+  border-radius: 3px 3px 0 0;
+}
+
+.excel-ribbon-tabs span.active {
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 700;
+  border: 1px solid var(--border);
+  border-bottom-color: var(--bg);
+}
+
+.excel-formula-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.excel-cell-ref {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 2px 10px;
+  border-radius: 2px;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: center;
+  color: var(--text);
+}
+
+.excel-fx {
+  font-style: italic;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.excel-formula-text {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-theme="intellij"] #intellij-chrome {
+  display: block;
+}
+
+:root[data-theme="intellij"] #intellij-statusbar {
+  display: flex;
+}
+
+#intellij-chrome {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.intellij-menubar {
+  padding: 5px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.intellij-tabs {
+  display: flex;
+  border-top: 1px solid var(--border);
+}
+
+.intellij-tabs span {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+.intellij-tabs span.active {
+  background: var(--bg);
+  color: var(--text);
+  border-top: 2px solid var(--accent);
+}
+
+#intellij-statusbar {
+  align-items: center;
+  gap: 16px;
+  padding: 3px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}

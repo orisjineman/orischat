@@ -1,0 +1,54 @@
+/* 인라인 수정 */
+
+/* 인라인 수정 */
+.inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.msg.editing {
+  max-width: 80%;
+}
+
+.inline-edit-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+.inline-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.inline-edit-hint {
+  margin-right: auto;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.inline-edit-save,
+.inline-edit-cancel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inline-edit-save {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}

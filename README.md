@@ -108,7 +108,7 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 ├── server.js        # Express + Socket.IO 서버 조립/시작
 ├── db.js, push.js   # 저장소(Turso) 진입점, 웹 푸시
 ├── lib/             # 서버 모듈 — config, 상태, 저장소 폴백, HTTP 라우트, db/, handlers/(소켓 이벤트)
-├── public/          # 브라우저 클라이언트 — index.html, style.css, js/(기능별 ES 모듈), stickers/
+├── public/          # 브라우저 클라이언트 — index.html, css/(영역별 스타일), js/(기능별 ES 모듈), stickers/
 ├── test/            # node --test 테스트
 └── docs/            # 아키텍처 문서, 스크린샷
 ```

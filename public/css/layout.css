@@ -1,0 +1,79 @@
+/* 채팅 화면 뼈대: 사이드바, 접속자 목록, 헤더 */
+
+/* 채팅 화면 */
+#chat-screen {
+  width: 100%;
+}
+
+#sidebar {
+  width: 200px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 20px 16px;
+  overflow-y: auto;
+}
+
+#sidebar h2 {
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 12px;
+}
+
+:root[data-theme="intellij"] #sidebar {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+
+:root[data-theme="intellij"] #sidebar h2::before {
+  content: '📁 ';
+}
+
+:root[data-theme="excel"] #sidebar h2::before {
+  content: '📗 ';
+}
+
+#user-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+#user-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#user-list li::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #34c759;
+  flex-shrink: 0;
+}
+
+#chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+#chat-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--panel);
+}

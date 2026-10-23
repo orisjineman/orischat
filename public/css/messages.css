@@ -1,0 +1,426 @@
+/* 메시지 목록과 말풍선, 라이트박스, 답장 인용, 리액션, 더 보기 */
+
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 엑셀 테마: 메시지 목록을 셀 그리드처럼, 말풍선은 각진 셀 모양으로 */
+:root[data-theme="excel"] #messages {
+  background-color: var(--panel);
+  background-image:
+    repeating-linear-gradient(to right, transparent 0 89px, var(--border) 89px 90px),
+    repeating-linear-gradient(to bottom, transparent 0 25px, var(--border) 25px 26px);
+}
+
+:root[data-theme="excel"] .msg:not(.system) {
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  font-family: Calibri, Arial, sans-serif;
+}
+
+:root[data-theme="excel"] .msg.other {
+  background: #ffffff;
+}
+
+/* 인텔리제이 테마: 메시지를 콘솔 출력/코드처럼 (닉네임=키워드색, 본문="문자열", 시간=주석) */
+:root[data-theme="intellij"] #messages {
+  background: var(--bg);
+}
+
+:root[data-theme="intellij"] .msg:not(.system) {
+  font-family: 'JetBrains Mono', Consolas, Menlo, monospace;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+:root[data-theme="intellij"] .msg .msg-nick {
+  color: var(--accent);
+}
+
+:root[data-theme="intellij"] .msg:not(.sticker):not(.deleted) .msg-body::before,
+:root[data-theme="intellij"] .msg:not(.sticker):not(.deleted) .msg-body::after {
+  content: '"';
+}
+
+:root[data-theme="intellij"] .msg.other:not(.sticker):not(.deleted) .msg-body {
+  color: #6a8759;
+}
+
+:root[data-theme="intellij"] .msg .msg-time::before {
+  content: '// ';
+  opacity: 0.7;
+}
+
+/* 대화를 위로 스크롤해서 읽던 중이어도, 새 메시지가 와서 화면이 맨 아래로
+   확 당겨지지 않게 함(appendMessage에서 처리) — 대신 이 버튼으로 원할 때
+   바로 맨 아래로 이동할 수 있게 함. */
+#scroll-bottom-btn {
+  position: absolute;
+  right: 20px;
+  bottom: 92px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 5;
+}
+
+#scroll-bottom-btn:hover {
+  background: var(--bubble-other);
+}
+
+.msg {
+  max-width: 60%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.msg .msg-nick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.msg-avatar {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.msg-avatar-img {
+  object-fit: cover;
+  background: var(--bubble-other);
+}
+
+.avatar-clickable {
+  cursor: zoom-in;
+}
+
+.msg-body a {
+  color: inherit;
+  text-decoration: underline;
+  word-break: break-all;
+}
+
+.msg .msg-time {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+.msg.other {
+  background: var(--bubble-other);
+  align-self: flex-start;
+}
+
+.msg.me {
+  background: var(--accent);
+  color: var(--accent-text);
+  align-self: flex-end;
+}
+
+.msg.me .msg-nick,
+.msg.me .msg-time {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.msg.system {
+  align-self: center;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.msg.sticker {
+  background: none !important;
+  padding: 0;
+  max-width: 160px;
+}
+
+.msg.sticker .msg-time {
+  color: var(--muted) !important;
+  opacity: 0.7;
+}
+
+.sticker-img {
+  display: block;
+  max-width: 160px;
+  max-height: 160px;
+  border-radius: 12px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.chat-image {
+  max-width: 240px;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+/* 사진/스티커 클릭 시 확대해서 보는 라이트박스 */
+#image-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  cursor: zoom-out;
+}
+
+#lightbox-img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: default;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+}
+
+#lightbox-close-btn {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#lightbox-close-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.reply-quote {
+  border-left: 3px solid var(--accent);
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(127, 127, 127, 0.08);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.reply-quote:hover {
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.msg.me .reply-quote {
+  color: rgba(255, 255, 255, 0.8);
+  border-left-color: rgba(255, 255, 255, 0.6);
+}
+
+.msg.me .reply-quote:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* 답장 클릭으로 원본으로 스크롤했을 때 잠깐 깜빡여서 어떤 메시지인지 알려줌 */
+@keyframes flash-highlight {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  30% {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+}
+
+.flash-highlight {
+  animation: flash-highlight 1.2s ease-out;
+}
+
+.read-status {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.msg.me .read-status {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.mention {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.msg.me .mention {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.msg-footer .msg-time {
+  margin-top: 0;
+}
+
+.react-btn,
+.reply-btn,
+.edit-btn,
+.copy-btn,
+.pin-btn,
+.delete-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  /* 평소엔 숨겨두고(자리는 유지) 마우스를 올리거나 탭했을 때만 보여줌 */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.msg:hover .react-btn,
+.msg:hover .reply-btn,
+.msg:hover .edit-btn,
+.msg:hover .copy-btn,
+.msg:hover .pin-btn,
+.msg:hover .delete-btn,
+.msg.actions-open .react-btn,
+.msg.actions-open .reply-btn,
+.msg.actions-open .edit-btn,
+.msg.actions-open .copy-btn,
+.msg.actions-open .pin-btn,
+.msg.actions-open .delete-btn,
+.msg:focus-within .react-btn,
+.msg:focus-within .reply-btn,
+.msg:focus-within .edit-btn,
+.msg:focus-within .copy-btn,
+.msg:focus-within .pin-btn,
+.msg:focus-within .delete-btn {
+  opacity: 0.55;
+  pointer-events: auto;
+}
+
+/* 고정된 메시지는 📌가 항상 보이고, 다시 누르면 해제 */
+.msg.pinned .pin-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.react-btn {
+  font-size: 13px;
+}
+
+.msg .react-btn:hover,
+.msg .reply-btn:hover,
+.msg .edit-btn:hover,
+.msg .copy-btn:hover,
+.msg .pin-btn:hover,
+.msg .delete-btn:hover {
+  opacity: 1;
+}
+
+.msg.deleted {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.msg-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.msg-reactions:empty {
+  margin-top: 0;
+}
+
+.reaction-pill {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  line-height: 1.6;
+}
+
+.reaction-pill.mine {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel));
+}
+
+#reaction-popup {
+  position: fixed;
+  display: flex;
+  gap: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+}
+
+.reaction-pick {
+  border: none;
+  background: none;
+  font-size: 18px;
+  padding: 4px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.reaction-pick:hover {
+  background: var(--bubble-other);
+}
+
+#load-more-btn {
+  align-self: center;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+#load-more-btn:hover {
+  background: var(--bubble-other);
+}

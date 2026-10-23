@@ -1,0 +1,92 @@
+/* 고정 메시지 바 */
+
+/* 고정 메시지 바 */
+#pin-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px;
+  background: var(--bubble-other);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.pin-bar-icon {
+  flex-shrink: 0;
+}
+
+#pin-bar-main {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  padding: 2px 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#pin-bar-toggle {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  border-radius: 999px;
+  font-size: 11px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+
+#pin-list {
+  max-height: 30vh;
+  overflow-y: auto;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.pin-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 20px;
+}
+
+.pin-row + .pin-row {
+  border-top: 1px solid var(--border);
+}
+
+.pin-row-main {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  font-size: 13px;
+  padding: 8px 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pin-row-unpin {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px;
+}
+
+@media (max-width: 640px) {
+  #pin-bar,
+  .pin-row {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}

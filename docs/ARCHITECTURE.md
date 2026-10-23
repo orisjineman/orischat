@@ -5,7 +5,7 @@
 ```
  브라우저 (public/)                               서버 (Node.js)                         외부 (모두 선택)
 ┌──────────────────────────┐   HTTP (정적/API)   ┌──────────────────────────────┐
-│ index.html + style.css   │ ──────────────────▶ │ Express                      │ ──▶ GIPHY API (/api/gifs 프록시)
+│ index.html + css/*.css   │ ──────────────────▶ │ Express                      │ ──▶ GIPHY API (/api/gifs 프록시)
 │ client.js → js/*.js      │                     │  routes / gifs / stickers    │ ──▶ 임의 웹페이지 (링크 미리보기)
 │ (ES 모듈, 번들러 없음)    │   WebSocket         │                              │
 │                          │ ◀─────────────────▶ │ Socket.IO                    │
@@ -71,7 +71,12 @@ orischat/
 │
 ├── public/                    # 브라우저 클라이언트 (정적 서빙, ESM)
 │   ├── index.html             #   단일 페이지 UI (로그인 화면 + 채팅 화면)
-│   ├── style.css              #   스타일 + 테마 (light/dark/intellij/excel/claude/claude-dark)
+│   ├── css/                   #   영역별 스타일 — index.html의 <link> 순서가 캐스케이드 순서
+│   │   ├── tokens.css         #     색 변수 + 테마별 값 (light/dark/intellij/excel/claude/claude-dark)
+│   │   ├── base.css, layout.css, login.css, header-tools.css
+│   │   ├── messages.css, compose.css, indicators.css, pins.css, gif.css, inline-edit.css, link-preview.css
+│   │   ├── mobile.css         #     좁은 화면(≤640px) 조정
+│   │   └── theme-chrome.css, claude-theme.css  #  테마 전용 장식·세부 조정
 │   ├── client.js              #   진입점 — js/* 모듈을 순서대로 import
 │   ├── package.json           #   {"type":"module"} (테스트에서 Node가 ESM으로 읽도록)
 │   ├── manifest.json          #   PWA 매니페스트

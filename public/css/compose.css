@@ -1,0 +1,158 @@
+/* 입력 중 표시, 입력창, 답장 배너, 스티커/이모지 선택 */
+
+#typing-indicator {
+  min-height: 20px;
+  padding: 0 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#message-form {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  position: relative;
+}
+
+#message-form #emoji-btn,
+#message-form #attach-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+#emoji-btn:hover,
+#attach-btn:hover {
+  background: var(--bubble-other);
+}
+
+#reply-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 20px;
+  background: var(--bubble-other);
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+#reply-banner-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#reply-cancel-btn {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+#emoji-picker {
+  position: absolute;
+  left: 20px;
+  bottom: 68px;
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+}
+
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.picker-empty {
+  padding: 12px 4px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.sticker-item {
+  border: none;
+  background: none;
+  padding: 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sticker-item:hover {
+  background: var(--bubble-other);
+}
+
+.sticker-item img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+#message-input-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+}
+
+#message-input {
+  flex: 1;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+}
+
+/* 엑셀 테마: 입력창을 선택된 셀처럼(초록 테두리 + 우하단 채우기 핸들) */
+:root[data-theme="excel"] #message-input {
+  border: 2px solid var(--accent);
+  border-radius: 0;
+  font-family: Calibri, Arial, sans-serif;
+}
+
+:root[data-theme="excel"] #message-input-wrap::after {
+  content: '';
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border: 1px solid var(--panel);
+}
+
+#message-form button {
+  width: auto;
+  padding: 12px 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

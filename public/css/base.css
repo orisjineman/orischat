@@ -1,0 +1,101 @@
+/* 기본 리셋, 화면 전환, 헤더 버튼·내 프로필 사진 */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+}
+
+.screen {
+  height: 100vh;
+  display: flex;
+}
+
+.hidden {
+  display: none !important;
+}
+
+#header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#theme-toggle-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+#theme-toggle-btn:hover {
+  background: var(--bubble-other);
+}
+
+#avatar-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+#avatar-btn:hover {
+  background: var(--bubble-other);
+}
+
+#avatar-btn-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 프로필 사진 변경용 작은 연필 배지 — 버튼 클릭 자체는 확대 보기라서,
+   사진 변경은 이 배지로 따로 뺌 */
+#avatar-edit-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1px solid var(--panel);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 8px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 헤더 버튼 안에 들어가는 내 프로필 사진/이니셜 — 기본 .msg-avatar는
+   메시지 옆에 쓰는 18px짜리라, 버튼을 꽉 채우도록 덮어씀 */
+#avatar-btn .msg-avatar {
+  width: 100%;
+  height: 100%;
+  font-size: 13px;
+}
