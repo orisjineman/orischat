@@ -3,6 +3,7 @@ logs/
 .DS_Store
 .env
 .stickers-cache/
-.claude/
+.claude/*
+!.claude/rules/
 .idea/
 turso_token
