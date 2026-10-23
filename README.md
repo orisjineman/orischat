@@ -105,43 +105,15 @@ VAPID_SUBJECT=mailto:you@example.com   # 선택, 기본값 있음
 
 ```
 .
-├── server.js              # Express + Socket.IO 서버 조립/시작 (라우트·핸들러 연결만 함)
-├── db.js                  # 저장소(Turso/libSQL) 진입점 — lib/db/ 모듈을 모아서 내보냄
-├── push.js                # 웹 푸시(Web Push) 알림 구독/발송
-├── lib/                   # 서버 내부 모듈
-│   ├── config.js            #   상수/환경 변수
-│   ├── state.js             #   접속자, 메시지 작성자 캐시, 읽음 위치 (메모리)
-│   ├── store.js             #   리액션/프로필 사진 저장소 (DB 또는 메모리 폴백)
-│   ├── pushSubscriptions.js #   푸시 구독 저장소 (DB 또는 메모리 폴백)
-│   ├── present.js           #   서버 데이터를 "보는 사람 기준"으로 변환 (clientId 비노출)
-│   ├── emitters.js          #   방 전체/개인별 전송 헬퍼 (접속자 목록, 읽음 갱신 등)
-│   ├── rateLimiter.js       #   도배 방지 (이벤트별 제한)
-│   ├── validation.js        #   입력 검증 (이미지 data URL, GIF 주소는 GIPHY CDN만)
-│   ├── routes.js            #   HTTP API (/api/config, /api/rooms, /avatar/:nickname)
-│   ├── gifs.js              #   GIF 검색 프록시 (/api/gifs — GIPHY 호출, 결과 캐시)
-│   ├── linkPreview.js       #   링크 미리보기 (OpenGraph 파싱, 썸네일 변환, SSRF 방어)
-│   ├── pinStore.js          #   고정 메시지 저장소 (DB 또는 메모리 폴백)
-│   ├── stickers.js          #   스티커 목록/이미지 서빙 (큰 이미지는 축소해서 캐시)
-│   ├── db/                  #   테이블별 DB 모듈 (client, schema, messages, reactions,
-│   │                        #   subscriptions, avatars)
-│   └── handlers/            #   소켓 이벤트별 핸들러 (session, chat, reactions, messageActions,
-│                            #   history, pins, linkPreview, avatar, presence, pushSubscription)
-├── public/
-│   ├── index.html           # 채팅 화면 UI
-│   ├── style.css            # 스타일 (라이트/다크/IntelliJ/Excel/Claude/Claude 다크 테마)
-│   ├── client.js            # 클라이언트 진입점 — js/ 모듈을 불러옴
-│   ├── js/                  # 기능별 ES 모듈 (login, messages, compose, mention, gif, pins,
-│   │                        # export, linkPreview, avatar, reactions, reply, search, read,
-│   │                        # lastSeen, unread, connection, theme, notifications, lightbox, ...)
-│   ├── package.json         # {"type":"module"} — 테스트에서 Node가 이 폴더를 ESM으로 읽게 함
-│   ├── manifest.json        # PWA 매니페스트
-│   ├── service-worker.js    # 백그라운드 푸시 수신용 Service Worker
-│   ├── icons/               # PWA 아이콘
-│   └── stickers/            # 커스텀 스티커 이미지 (아래 참고)
-├── test/                  # 서버/클라이언트 테스트 (node --test, 아래 참고)
-│   └── helpers/             #   소켓 하네스, 가짜 web-push, push 공용 시나리오
-└── package.json
+├── server.js        # Express + Socket.IO 서버 조립/시작
+├── db.js, push.js   # 저장소(Turso) 진입점, 웹 푸시
+├── lib/             # 서버 모듈 — config, 상태, 저장소 폴백, HTTP 라우트, db/, handlers/(소켓 이벤트)
+├── public/          # 브라우저 클라이언트 — index.html, style.css, js/(기능별 ES 모듈), stickers/
+├── test/            # node --test 테스트
+└── docs/            # 아키텍처 문서, 스크린샷
 ```
+
+파일별 설명, 데이터 흐름, 소켓 이벤트·HTTP 엔드포인트·DB 테이블 목록은 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)에 정리되어 있습니다.
 
 ## 테스트
 
