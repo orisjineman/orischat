@@ -138,8 +138,8 @@ Node 내장 테스트 러너(`node --test`)로 실행하며, 별도 서버나 DB
 | `client.test.js` | 브라우저 클라이언트 — 실제 `index.html`을 [jsdom](https://github.com/jsdom/jsdom)에 올리고 가짜 소켓으로 서버 이벤트를 흉내내 DOM/전송 이벤트 검증 |
 
 - 특정 파일만 실행: `node --test test/db.test.js`
-- 클라이언트 테스트는 jsdom 때문에 **Node 20.19 이상**이 필요합니다.
-- GitHub Actions에서 push/PR마다 자동으로 돌아갑니다 (`.github/workflows/test.yml`, Node 20).
+- **Node 24 이상**이 필요합니다 (버전은 `.node-version`에 고정, Render와 CI도 이 파일을 따름).
+- GitHub Actions에서 push/PR마다 자동으로 돌아갑니다 (`.github/workflows/test.yml`).
 
 ## 커스텀 스티커 추가하기
 

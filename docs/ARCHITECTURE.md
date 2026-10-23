@@ -27,7 +27,7 @@ orischat/
 ├── push.js                    # Web Push: VAPID 설정, 구독/해지, 방 단위 알림 발송 (본문 미포함)
 ├── package.json               # 스크립트: start / dev / test
 ├── render.yaml                # Render 배포 설정 (free plan)
-├── deploy.sh                  # 맥 로컬(launchctl) 서버용 배포 스크립트
+├── .node-version              # Node 버전 고정 (24) — Render·CI 공용
 ├── CLAUDE.md                  # Claude Code 작업 가이드 (이 문서를 @import)
 ├── .claude/rules/             # 경로별 Claude 규칙: testing.md(test/**), client.md(public/**)
 ├── README.md                  # 사용자용 설명 (기능, 환경 변수, 한계)
@@ -116,7 +116,7 @@ orischat/
 │   └── images/                #   README 스크린샷
 │
 └── .github/workflows/
-    ├── test.yml               #   push/PR마다 npm test (Node 20)
+    ├── test.yml               #   push/PR마다 npm test (.node-version의 Node)
     └── keep-alive.yml         #   평일 KST 08~18시에 14분마다 Render 앱 핑 (무료 플랜 슬립 방지)
 ```
 

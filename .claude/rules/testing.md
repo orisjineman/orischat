@@ -15,6 +15,6 @@ paths:
 - 외부 서비스는 실제로 호출하지 않음: web-push → `helpers/fake-webpush.js`, GIPHY·링크 미리보기 → 테스트 안에서 띄운 로컬 HTTP 서버.
   링크 미리보기 테스트는 로컬 주소를 써야 해서 `LINK_PREVIEW_ALLOW_PRIVATE=1`을 켬.
 - 푸시처럼 메모리/DB 두 저장 경로가 있는 기능은 `helpers/push-scenarios.js`처럼 시나리오를 공유해서 두 모드에 같은 테스트를 돌림.
-- 클라이언트 테스트(`client.test.js`)는 실제 `public/index.html`을 jsdom에 올리고 가짜 소켓으로 서버 이벤트를 흉내냄 (Node 20.19+ 필요).
+- 클라이언트 테스트(`client.test.js`)는 실제 `public/index.html`을 jsdom에 올리고 가짜 소켓으로 서버 이벤트를 흉내냄.
 - `assert`는 `node:assert/strict`. 테스트 이름과 실패 메시지는 한국어.
 - 기능을 바꾸면 해당 테스트를 같이 추가/수정하고 `npm test` 전체 통과를 확인할 것.

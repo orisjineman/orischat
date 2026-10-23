@@ -17,7 +17,7 @@ npm test                           # node --test, 서버/DB 없이 전부 돌아
 node --test test/chat.test.js      # 파일 하나만
 ```
 
-- Node 18+ (클라이언트 테스트는 jsdom 때문에 **20.19+**), CI는 Node 20 (`.github/workflows/test.yml`).
+- Node 24+ (`.node-version`에 고정 — Render 배포와 CI(`.github/workflows/test.yml`)가 이 파일을 따름).
 - 빌드 단계 없음.
 
 ## 핵심 규칙 (서버)
@@ -47,4 +47,4 @@ node --test test/chat.test.js      # 파일 하나만
 
 - **스티커 추가:** `public/stickers/`에 이미지(png/jpg/gif/webp)를 넣기만 하면 됨. 코드 수정·재시작 불필요.
   320px보다 크면 서버가 `.stickers-cache/`에 축소본을 만들어 서빙. 파일명은 로마자 소문자(`kkeudeok.png`).
-- **배포:** `main`에 push → Render 자동 배포. `deploy.sh`는 맥 로컬(launchctl) 서버용이라 Windows에서는 쓰지 않음.
+- **배포:** `main`에 push → Render 자동 배포 (`render.yaml`).
